@@ -33,3 +33,5 @@ logs
 
 # misc
 *.pem
+
+/generated/prisma
