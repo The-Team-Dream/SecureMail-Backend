@@ -19,26 +19,29 @@ export class AuthService {
         }
         const hashedPassword = await bcrypt.hash(data.password, 10)
         const user = await this.prisma.user.create({
-            data:{
+            data: {
                 email: data.email,
-                password: hashedPassword,
-                name: data.name
+                passwordHash: hashedPassword,
+                username: data.name
             }
         })
-        const token = this.jwtService.sign({userId: user.id})
-        return {user, token}
+        const token = this.jwtService.sign({ userId: user.id })
+        return { user, token }
     }
 
-    async login(data:{email: string; password: string}){
-        const user = await this.prisma.user.findUnique({where:{email: data.email}})
-        if(!user){
+    async login(data: { email: string; password: string }) {
+        const user = await this.prisma.user.findUnique({
+            where: { email: data.email },
+        })
+        if (!user) {
             throw new UnauthorizedException("Invalid credentials")
         }
-        const passwordValid = await bcrypt.compare(data.password, user.password)
-        if(!passwordValid){
+        const passwordValid = await bcrypt.compare(data.password, user.passwordHash)
+        if (!passwordValid) {
             throw new UnauthorizedException("Invalid credentials")
-        }
-        const token = this.jwtService.sign({userId:user.id})
-        return {user, token}
+        } 
+        const token = this.jwtService.sign({ userId: user.id })
+        return { user, token }
     }
+    
 }

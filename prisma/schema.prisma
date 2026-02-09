@@ -5,22 +5,229 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
-  moduleFormat    = "cjs"
-
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
-  
 }
 
 model User {
-  id    Int     @default(autoincrement()) @id
-  name  String?
-  email String  @unique
-  password String
-  createdAt DateTime @default(now())
+  id            Int            @id @default(autoincrement())
+  username      String?
+  email         String         @unique
+  passwordHash  String
+  avatar        String?
+  isVerified    Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  emailAccounts EmailAccount[]
+  sessions      UserSession[]
+  settings      UserSetting[]
+  notifications Notification[]
+}
 
+model UserSession {
+  id           Int      @id @default(autoincrement())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       Int
+  refreshToken String
+  userAgent    String
+  ipAddress    String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+model UserSetting {
+  id                   Int      @id @default(autoincrement())
+  user                 User     @relation(fields: [userId], references: [id])
+  userId               Int
+  notificationsEnabled Boolean
+  createdAt            DateTime @default(now())
+}
+
+model EmailAccount {
+  id            Int            @id @default(autoincrement())
+  user          User           @relation(fields: [userId], references: [id])
+  userId        Int
+  emailAddress  String
+  provider      EmailProviders
+  displayName   String
+  isActive      Boolean
+  lastSyncedAt  DateTime
+  createdAt     DateTime
+  imapConfig    ImapConfig?
+  smtpConfig    SmtpConfig?
+  oauthToken    OauthToken?
+  folders       Folder[]
+  emails        Email[]
+  notifications Notification[]
+  syncLog       SyncLog[]
+}
+
+enum EmailProviders {
+  GMAIL
+  OUTLOOK
+  YAHOO
+  CUSTOM
+}
+
+model ImapConfig {
+  id             Int          @id @default(autoincrement())
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id])
+  emailAccountId Int          @unique
+  host           String
+  port           Int
+  secure         Boolean
+  authType       ImapAuthType
+  createdAt      DateTime     @default(now())
+}
+
+enum ImapAuthType {
+  OAUTH
+  PASSWORD
+}
+
+model SmtpConfig {
+  id             Int          @id @default(autoincrement())
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id])
+  emailAccountId Int          @unique
+  host           String
+  port           Int
+  secure         String
+  authType       SmtpAuthType
+  createdAt      DateTime     @default(now())
+}
+
+enum SmtpAuthType {
+  OAUTH
+  PASSWORD
+}
+
+model OauthToken {
+  id                    Int          @id @default(autoincrement())
+  emailAccount          EmailAccount @relation(fields: [emailAccountId], references: [id])
+  emailAccountId        Int          @unique
+  provider              String
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String
+  expiresAt             DateTime
+  scope                 String
+  createdAt             DateTime     @default(now())
+}
+
+model Folder {
+  id             Int          @id @default(autoincrement())
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id])
+  emailAccountId Int
+  name           String
+  type           FolderType
+  remoteId       String
+  emails         Email[]
+  createdAt      DateTime     @default(now())
+
+  @@index([emailAccountId])
+  @@index([remoteId])
+}
+
+enum FolderType {
+  INBOX
+  SENT
+  SPAM
+  TRASH
+  CUSTOM
+}
+
+model Email {
+  id             Int             @id @default(autoincrement())
+  emailAccount   EmailAccount    @relation(fields: [emailAccountId], references: [id])
+  emailAccountId Int
+  folder         Folder          @relation(fields: [folderId], references: [id])
+  folderId       Int
+  messageId      String
+  subject        String
+  recipientType  RecipientType[]
+  bodyText       String
+  bodyHtml       String
+  isRead         Boolean
+  isFlagged      Boolean
+  isSpam         Boolean
+  receivedAt     DateTime
+  createdAt      DateTime        @default(now())
+  emailFlag      EmailFlag?
+  attachments    Attachment[]
+  notifications  Notification[]
+
+  @@index([emailAccountId])
+  @@index([folderId])
+  @@index([receivedAt])
+  @@index([messageId])
+}
+
+enum RecipientType {
+  FROM
+  TO
+  CC
+  BCC
+}
+
+model EmailFlag {
+  id        Int           @id @default(autoincrement())
+  email     Email         @relation(fields: [emailId], references: [id])
+  emailId   Int           @unique
+  type      EmailFlagType
+  createdAt DateTime      @default(now())
+}
+
+enum EmailFlagType {
+  SEEN
+  FLAGGED
+  ANSWERED
+}
+
+model Attachment {
+  id          Int      @id @default(autoincrement())
+  email       Email    @relation(fields: [emailId], references: [id])
+  emailId     Int
+  mimiType    String
+  size        Int
+  storagePath String
+  createdAt   DateTime @default(now())
+}
+
+model Notification {
+  id             Int              @id @default(autoincrement())
+  user           User             @relation(fields: [userId], references: [id])
+  userId         Int
+  emailAccount   EmailAccount     @relation(fields: [emailAccountId], references: [id])
+  emailAccountId Int
+  email          Email            @relation(fields: [emailId], references: [id])
+  emailId        Int
+  type           NotificationType
+  isRead         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  @@index([emailAccountId])
+  @@index([userId])
+  @@index([isRead])
+}
+
+enum NotificationType {
+  NEW_EMAIL
+  SECURITY_ALERT
+}
+
+model SyncLog {
+  id             Int          @id @default(autoincrement())
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id])
+  emailAccountId Int
+  status         SyncStatus
+  errorMessage   String
+  syncedAt       DateTime
+}
+
+enum SyncStatus {
+  SUCCESS
+  FAILED
 }
