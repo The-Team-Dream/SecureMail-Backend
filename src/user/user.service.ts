@@ -6,8 +6,11 @@ export class UserService {
     constructor(
         private prisma: PrismaService
     ){}
-    async users(){
-        const users = await this.prisma.user.findMany()
-        return {users}
+    async profile(id: number){
+        const user = await this.prisma.user.findUnique({
+            where:{id: id}
+        })
+        return {user}
     } 
 }
+//122318
