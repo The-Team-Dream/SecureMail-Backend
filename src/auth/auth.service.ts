@@ -42,8 +42,9 @@ export class AuthService {
         })
         const token = this.jwtService.sign({ userId: user.id })
         await this.mailerService.sendOTP(user,otp)
-        return { message: "Account Created Successfully" , otp}
+        return {otp}
     }
+
     async verifyRegisterOtp(email: string, otp: string) {
         const hashedOtp = crypto
             .createHash('sha256')
@@ -75,6 +76,10 @@ export class AuthService {
     async login(data: { email: string; password: string }) {
         const user = await this.prisma.user.findUnique({
             where: { email: data.email },
+            select:{
+                id:true,
+                passwordHash:true,
+            }
         })
         if (!user) {
             throw new UnauthorizedException("Invalid credentials")
@@ -84,7 +89,7 @@ export class AuthService {
             throw new UnauthorizedException("Invalid credentials") 
         }
         const token = this.jwtService.sign({ userId: user.id })
-        return { user, token }
+        return { token }
     } 
     async forgetPassword(email: string) {
         const user = await this.prisma.user.findUnique({
@@ -93,10 +98,10 @@ export class AuthService {
         if (!user) {
             return { message: 'If email exists, reset link will be sent' };
         }
-        const token = crypto.randomBytes(32).toString('hex');
+        const resetToken = crypto.randomBytes(32).toString('hex');
         const hashedToken = crypto
             .createHash('sha256')
-            .update(token)
+            .update(resetToken)
             .digest('hex');
 
         await this.prisma.user.update({
@@ -106,8 +111,8 @@ export class AuthService {
                 resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000),
             },
         });
-        await this.mailerService.resetPassword(user, token)
-        return { message: 'Reset link sent if email exists', token };
+        await this.mailerService.resetPassword(user, resetToken)
+        return { resetToken };
     }
 
     async resetPassword(token: string, newPassword: string) {

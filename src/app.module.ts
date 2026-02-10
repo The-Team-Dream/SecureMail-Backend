@@ -12,12 +12,41 @@ import { PrismaModule } from './prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { NodeMailerModule } from './node-mailer/node-mailer.module';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
-  imports: [AuthModule, UserModule, EmailAccountsModule, MailModule, FoldersModule, NotificationsModule, HealthModule, PrismaModule, ConfigModule.forRoot({
-    isGlobal: true,
-  }), MailerModule, NodeMailerModule,],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          limit: 20,
+          ttl: 60000,
+        },
+      ],
+    }),
+    AuthModule,
+    UserModule,
+    EmailAccountsModule,
+    MailModule,
+    FoldersModule,
+    NotificationsModule,
+    HealthModule,
+    PrismaModule,
+    MailerModule,
+    NodeMailerModule,
+  ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard
+    }
+
+  ],
 })
 export class AppModule { }
