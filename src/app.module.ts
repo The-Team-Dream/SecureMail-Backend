@@ -10,13 +10,14 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma.module';
 import { ConfigModule } from '@nestjs/config';
+import { MailerModule } from '@nestjs-modules/mailer';
+import { NodeMailerModule } from './node-mailer/node-mailer.module';
 
 @Module({
   imports: [AuthModule, UserModule, EmailAccountsModule, MailModule, FoldersModule, NotificationsModule, HealthModule, PrismaModule, ConfigModule.forRoot({
     isGlobal: true,
-  }),],
+  }), MailerModule, NodeMailerModule,],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule { }
-//test test test

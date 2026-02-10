@@ -3,18 +3,20 @@ import { PrismaService } from 'src/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
+import { NodeMailerService } from 'src/node-mailer/node-mailer.service';
 
 @Injectable()
 export class AuthService {
     constructor(
         private prisma: PrismaService,
         private jwtService: JwtService,
+        private mailerService: NodeMailerService
     ) { }
     generateOTP(): string {
         return Math.floor(100000 + Math.random() * 900000).toString();
     }
 
-    async register(data: { email: string; password: string; name: string }) {
+    async register(data: { email: string; password: string; username: string }) {
         const existingUser = await this.prisma.user.findUnique({
             where: { email: data.email }
         })
@@ -33,16 +35,14 @@ export class AuthService {
             data: {
                 email: data.email,
                 passwordHash: hashedPassword,
-                username: data.name,
+                username: data.username,
                 otpCode: hashedOtp,
                 otpExpires: new Date(Date.now() + 15 * 60 * 1000)
             }
         })
-        //mail server to otp
         const token = this.jwtService.sign({ userId: user.id })
-        console.log('OTP:', otp);
-
-        return { message: "Account Created Successfully" }
+        await this.mailerService.sendOTP(user,otp)
+        return { message: "Account Created Successfully" , otp}
     }
     async verifyRegisterOtp(email: string, otp: string) {
         const hashedOtp = crypto
@@ -69,6 +69,7 @@ export class AuthService {
                 otpExpires: null
             }
         })
+        await this.mailerService.welcome(user)
         return { message: "Account verified successfully" }
     }
     async login(data: { email: string; password: string }) {
@@ -77,14 +78,14 @@ export class AuthService {
         })
         if (!user) {
             throw new UnauthorizedException("Invalid credentials")
-        }
+        } 
         const passwordValid = await bcrypt.compare(data.password, user.passwordHash)
         if (!passwordValid) {
-            throw new UnauthorizedException("Invalid credentials")
+            throw new UnauthorizedException("Invalid credentials") 
         }
         const token = this.jwtService.sign({ userId: user.id })
         return { user, token }
-    }
+    } 
     async forgetPassword(email: string) {
         const user = await this.prisma.user.findUnique({
             where: { email },
@@ -105,10 +106,8 @@ export class AuthService {
                 resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000),
             },
         });
-        const resetLink = `https://localhost:3000/reset-password?token=${token}`;
-        //mail server
+        await this.mailerService.resetPassword(user, token)
         return { message: 'Reset link sent if email exists', token };
-
     }
 
     async resetPassword(token: string, newPassword: string) {
@@ -138,7 +137,6 @@ export class AuthService {
                 resetPasswordExpires: null,
             },
         });
-
         return { message: 'Password updated successfully' };
     }
 }

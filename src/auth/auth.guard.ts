@@ -23,15 +23,19 @@ export class AuthGuard implements CanActivate {
     try {
       const payload = await this.jwtService.verifyAsync(token)
       const user = await this.prisma.user.findUnique({
-        where: { id: payload.userId }
+        where: { id: payload.userId },
+        select:{
+          id:true,
+          isVerified:true,
+        }
       });
       if (!user) {
         throw new UnauthorizedException();
       }
       if (!user?.isVerified) {
         throw new ForbiddenException('Account not verified');
-      }
-      request['user'] = payload
+      }      
+      request['user'] = user
     } catch {
       throw new UnauthorizedException()
     }

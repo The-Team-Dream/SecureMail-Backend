@@ -8,8 +8,7 @@ export class UserController {
     
     @UseGuards(AuthGuard)
     @Get("profile")
-    async users(@Req() req) {
-        return this.userService.profile(req.user.userId)
+    async users(@Req() req) {        
+        return this.userService.profile(req.user.id)
     }
 }
- //887640
