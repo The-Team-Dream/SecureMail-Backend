@@ -4,6 +4,9 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { NodeMailerService } from 'src/node-mailer/node-mailer.service';
+import { User } from 'generated/prisma/client';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
@@ -12,37 +15,41 @@ export class AuthService {
         private jwtService: JwtService,
         private mailerService: NodeMailerService
     ) { }
-    generateOTP(): string {
-        return Math.floor(100000 + Math.random() * 900000).toString();
+    async generateJWT(user: User): Promise<string> {
+        const token = await this.jwtService.signAsync({ userId: user.id })
+        return token
     }
-
-    async register(data: { email: string; password: string; username: string }) {
-        const existingUser = await this.prisma.user.findUnique({
-            where: { email: data.email }
-        })
-        if (existingUser) {
-            throw new BadRequestException('Email already in use')
-        }
-        const hashedPassword = await bcrypt.hash(data.password, 10)
-
-        const otp = this.generateOTP();
-        const hashedOtp = crypto
-            .createHash('sha256')
-            .update(otp)
-            .digest('hex');
-
-        const user = await this.prisma.user.create({
-            data: {
-                email: data.email,
-                passwordHash: hashedPassword,
-                username: data.username,
-                otpCode: hashedOtp,
-                otpExpires: new Date(Date.now() + 15 * 60 * 1000)
+    async generateOTP(): Promise<string> {
+        return crypto.randomInt(100000, 999999).toString();
+    }
+    async register(data: RegisterDto) {
+        try {
+            const existingUser = await this.prisma.user.findUnique({where: { email: data.email }})
+            if (existingUser) {
+                throw new BadRequestException('Email already in use')
             }
-        })
-        const token = this.jwtService.sign({ userId: user.id })
-        await this.mailerService.sendOTP(user,otp)
-        return {otp}
+            const hashedPassword = await bcrypt.hash(data.password, 10)
+
+            const otp = await this.generateOTP();
+            const hashedOtp = crypto
+                .createHash('sha256')
+                .update(otp)
+                .digest('hex');
+
+            const user = await this.prisma.user.create({
+                data: {
+                    email: data.email,
+                    passwordHash: hashedPassword,
+                    username: data.username,
+                    otpCode: hashedOtp,
+                    otpExpires: new Date(Date.now() + 15 * 60 * 1000)
+                }
+            })
+            await this.mailerService.sendOTP(user, otp)
+            return { message: "OTP sent to your email" }
+        } catch (err) {
+            throw new BadRequestException(err.message)
+        }
     }
 
     async verifyRegisterOtp(email: string, otp: string) {
@@ -73,24 +80,21 @@ export class AuthService {
         await this.mailerService.welcome(user)
         return { message: "Account verified successfully" }
     }
-    async login(data: { email: string; password: string }) {
-        const user = await this.prisma.user.findUnique({
-            where: { email: data.email },
-            select:{
-                id:true,
-                passwordHash:true,
-            }
-        })
+    async login(data: LoginDto) {
+        const user = await this.prisma.user.findUnique({ where: { email: data.email } })
         if (!user) {
             throw new UnauthorizedException("Invalid credentials")
-        } 
+        }
+        if (!user.passwordHash || user.provider !== "local") {
+            throw new UnauthorizedException("Invalid credentials");
+        }
         const passwordValid = await bcrypt.compare(data.password, user.passwordHash)
         if (!passwordValid) {
-            throw new UnauthorizedException("Invalid credentials") 
+            throw new UnauthorizedException("Invalid credentials")
         }
-        const token = this.jwtService.sign({ userId: user.id })
+        const token = await this.generateJWT(user)
         return { token }
-    } 
+    }
     async forgetPassword(email: string) {
         const user = await this.prisma.user.findUnique({
             where: { email },
@@ -112,7 +116,7 @@ export class AuthService {
             },
         });
         await this.mailerService.resetPassword(user, resetToken)
-        return { resetToken };
+        return { message:`Reset email sent to ${email}`};
     }
 
     async resetPassword(token: string, newPassword: string) {
@@ -144,4 +148,49 @@ export class AuthService {
         });
         return { message: 'Password updated successfully' };
     }
+    async validateGoogleUser(data: {
+        googleId: string;
+        provider: string;
+        email: string;
+        firstName?: string;
+        lastName?: string;
+        avatar?: string;
+        accessToken: string;
+        refreshToken: string
+    }) {
+        let user = await this.prisma.user.findUnique({
+            where: { email: data.email },
+        });
+
+        if (user) {
+            if (user.provider !== "google" || !user.oauthId) {
+                throw new UnauthorizedException("Unauthorized")
+            }
+            user = await this.prisma.user.update({
+                where: { email: data.email },
+                data: {
+                    oauthId: data.googleId,
+                    oauthAccessToken: data.accessToken,
+                    oauthRefreshToken: data.refreshToken,
+                },
+            });
+        } else {
+            user = await this.prisma.user.create({
+                data: {
+                    email: data.email,
+                    username: `${data.firstName}${data.lastName}`,
+                    avatar: data.avatar,
+                    provider: 'google',
+                    oauthId: data.googleId,
+                    isVerified: true,
+                    oauthAccessToken: data.accessToken,
+                    oauthRefreshToken: data.refreshToken,
+                },
+            });
+        }
+ 
+        return user
+    }
+
 }
+//logout

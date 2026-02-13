@@ -15,21 +15,25 @@ datasource db {
 }
 
 model User {
-  id            Int            @id @default(autoincrement())
-  username      String?
-  email         String         @unique
-  passwordHash  String
-  avatar        String?
-  otpCode String?
-  otpExpires DateTime?
-  resetPasswordToken String?
+  id                   Int            @id @default(autoincrement())
+  email                String         @unique
+  provider             String         @default("local")
+  username             String?
+  passwordHash         String?
+  avatar               String?
+  otpCode              String?
+  otpExpires           DateTime?
+  resetPasswordToken   String?
   resetPasswordExpires DateTime?
-  isVerified    Boolean        @default(false)
-  createdAt     DateTime       @default(now())
-  emailAccounts EmailAccount[]
-  sessions      UserSession[]
-  settings      UserSetting[]
-  notifications Notification[]
+  oauthId              String?
+  oauthAccessToken     String?
+  oauthRefreshToken    String?
+  isVerified           Boolean        @default(false)
+  createdAt            DateTime       @default(now())
+  mailBoxes            MailBox[]
+  sessions             UserSession[]
+  settings             UserSetting[]
+  notifications        Notification[]
 }
 
 model UserSession {
@@ -51,7 +55,7 @@ model UserSetting {
   createdAt            DateTime @default(now())
 }
 
-model EmailAccount {
+model MailBox {
   id            Int            @id @default(autoincrement())
   user          User           @relation(fields: [userId], references: [id])
   userId        Int
@@ -78,14 +82,14 @@ enum EmailProviders {
 }
 
 model ImapConfig {
-  id             Int          @id @default(autoincrement())
-  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id])
-  emailAccountId Int          @unique
-  host           String
-  port           Int
-  secure         Boolean
-  authType       ImapAuthType
-  createdAt      DateTime     @default(now())
+  id        Int          @id @default(autoincrement())
+  mailBox   MailBox      @relation(fields: [mailBoxId], references: [id])
+  mailBoxId Int          @unique
+  host      String
+  port      Int
+  secure    Boolean
+  authType  ImapAuthType
+  createdAt DateTime     @default(now())
 }
 
 enum ImapAuthType {
@@ -94,14 +98,14 @@ enum ImapAuthType {
 }
 
 model SmtpConfig {
-  id             Int          @id @default(autoincrement())
-  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id])
-  emailAccountId Int          @unique
-  host           String
-  port           Int
-  secure         String
-  authType       SmtpAuthType
-  createdAt      DateTime     @default(now())
+  id        Int          @id @default(autoincrement())
+  mailBox   MailBox      @relation(fields: [mailBoxId], references: [id])
+  mailBoxId Int          @unique
+  host      String
+  port      Int
+  secure    String
+  authType  SmtpAuthType
+  createdAt DateTime     @default(now())
 }
 
 enum SmtpAuthType {
@@ -110,28 +114,28 @@ enum SmtpAuthType {
 }
 
 model OauthToken {
-  id                    Int          @id @default(autoincrement())
-  emailAccount          EmailAccount @relation(fields: [emailAccountId], references: [id])
-  emailAccountId        Int          @unique
+  id                    Int      @id @default(autoincrement())
+  mailBox               MailBox  @relation(fields: [mailBoxId], references: [id])
+  mailBoxId             Int      @unique
   provider              String
   accessTokenEncrypted  String
   refreshTokenEncrypted String
   expiresAt             DateTime
   scope                 String
-  createdAt             DateTime     @default(now())
+  createdAt             DateTime @default(now())
 }
 
 model Folder {
-  id             Int          @id @default(autoincrement())
-  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id])
-  emailAccountId Int
-  name           String
-  type           FolderType
-  remoteId       String
-  emails         Email[]
-  createdAt      DateTime     @default(now())
+  id        Int        @id @default(autoincrement())
+  mailBox   MailBox    @relation(fields: [mailBoxId], references: [id])
+  mailBoxId Int
+  name      String
+  type      FolderType
+  remoteId  String
+  emails    Email[]
+  createdAt DateTime   @default(now())
 
-  @@index([emailAccountId])
+  @@index([mailBoxId])
   @@index([remoteId])
 }
 
@@ -144,26 +148,26 @@ enum FolderType {
 }
 
 model Email {
-  id             Int             @id @default(autoincrement())
-  emailAccount   EmailAccount    @relation(fields: [emailAccountId], references: [id])
-  emailAccountId Int
-  folder         Folder          @relation(fields: [folderId], references: [id])
-  folderId       Int
-  messageId      String
-  subject        String
-  recipientType  RecipientType[]
-  bodyText       String
-  bodyHtml       String
-  isRead         Boolean
-  isFlagged      Boolean
-  isSpam         Boolean
-  receivedAt     DateTime
-  createdAt      DateTime        @default(now())
-  emailFlag      EmailFlag?
-  attachments    Attachment[]
-  notifications  Notification[]
+  id            Int             @id @default(autoincrement())
+  mailBox       MailBox         @relation(fields: [mailBoxId], references: [id])
+  mailBoxId     Int
+  folder        Folder          @relation(fields: [folderId], references: [id])
+  folderId      Int
+  messageId     String
+  subject       String
+  recipientType RecipientType[]
+  bodyText      String
+  bodyHtml      String
+  isRead        Boolean
+  isFlagged     Boolean
+  isSpam        Boolean
+  receivedAt    DateTime
+  createdAt     DateTime        @default(now())
+  emailFlag     EmailFlag?
+  attachments   Attachment[]
+  notifications Notification[]
 
-  @@index([emailAccountId])
+  @@index([mailBoxId])
   @@index([folderId])
   @@index([receivedAt])
   @@index([messageId])
@@ -201,18 +205,18 @@ model Attachment {
 }
 
 model Notification {
-  id             Int              @id @default(autoincrement())
-  user           User             @relation(fields: [userId], references: [id])
-  userId         Int
-  emailAccount   EmailAccount     @relation(fields: [emailAccountId], references: [id])
-  emailAccountId Int
-  email          Email            @relation(fields: [emailId], references: [id])
-  emailId        Int
-  type           NotificationType
-  isRead         Boolean          @default(false)
-  createdAt      DateTime         @default(now())
+  id        Int              @id @default(autoincrement())
+  user      User             @relation(fields: [userId], references: [id])
+  userId    Int
+  mailBox   MailBox          @relation(fields: [mailBoxId], references: [id])
+  mailBoxId Int
+  email     Email            @relation(fields: [emailId], references: [id])
+  emailId   Int
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
 
-  @@index([emailAccountId])
+  @@index([mailBoxId])
   @@index([userId])
   @@index([isRead])
 }
@@ -223,12 +227,12 @@ enum NotificationType {
 }
 
 model SyncLog {
-  id             Int          @id @default(autoincrement())
-  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id])
-  emailAccountId Int
-  status         SyncStatus
-  errorMessage   String
-  syncedAt       DateTime
+  id           Int        @id @default(autoincrement())
+  mailBox      MailBox    @relation(fields: [mailBoxId], references: [id])
+  mailBoxId    Int
+  status       SyncStatus
+  errorMessage String
+  syncedAt     DateTime
 }
 
 enum SyncStatus {

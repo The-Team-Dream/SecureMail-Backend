@@ -10,7 +10,6 @@ export class NodeMailerService {
     constructor(private mailerService: MailerService) { }
     
     async welcome(user: User) {
-        console.log(user);
         
         await this.mailerService.sendMail({
             to: user.email,

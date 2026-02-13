@@ -4,14 +4,21 @@ import { AuthService } from './auth.service';
 import { PrismaModule } from 'src/prisma.module';
 import { JwtModule } from '@nestjs/jwt';
 import { NodeMailerModule } from 'src/node-mailer/node-mailer.module';
+import { PassportModule } from '@nestjs/passport';
+import { GoogleStrategy } from './strategies/google-strategy';
 
 @Module({
-  imports:[PrismaModule, JwtModule.register({
+  imports: [
+    JwtModule.register({
       global: true,
       secret: "secret",
       signOptions: { expiresIn: '60s' },
-    }),NodeMailerModule],
+    }),
+    PassportModule,
+    PrismaModule,
+    NodeMailerModule
+  ],
   controllers: [AuthController],
-  providers: [AuthService]
+  providers: [AuthService, GoogleStrategy]
 })
-export class AuthModule {}
+export class AuthModule { }
