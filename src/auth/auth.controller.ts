@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
-import { Response } from 'express';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { TokenGuard } from './guards/auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -18,6 +18,12 @@ export class AuthController {
     async login(@Body() data: LoginDto) {
         return this.authService.login(data)
     }
+    @UseGuards(TokenGuard)
+    @Post("logout")
+    async logout(@Headers('authorization') authHeader: string) {
+        const token = authHeader?.split(' ')[1];
+        return this.authService.logout(token)
+    }
 
     @Post('forget-password')
     forgetPassword(@Body('email') email: string) {
@@ -31,7 +37,7 @@ export class AuthController {
     ) {
         return this.authService.resetPassword(resetPasswordToken, newPassword);
     }
-
+    @UseGuards(TokenGuard)
     @Post('verify-register-otp')
     verifyRegisterOtp(
         @Body('email') email: string,

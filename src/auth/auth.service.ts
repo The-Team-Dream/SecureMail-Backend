@@ -7,24 +7,39 @@ import { NodeMailerService } from 'src/node-mailer/node-mailer.service';
 import { User } from 'generated/prisma/client';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import Redis from 'ioredis';
+import { InjectRedis } from '@nestjs-modules/ioredis';
 
 @Injectable()
 export class AuthService {
     constructor(
         private prisma: PrismaService,
         private jwtService: JwtService,
-        private mailerService: NodeMailerService
+        private mailerService: NodeMailerService,
+        @InjectRedis() private readonly redis: Redis
     ) { }
     async generateJWT(user: User): Promise<string> {
         const token = await this.jwtService.signAsync({ userId: user.id })
         return token
+    }
+    async blacklistToken(token: string, expiresIn: number) {
+        await this.redis.set(
+            `bl:${token}`,
+            'blacklisted',
+            'EX',
+            expiresIn,
+        );
+    }
+    async isBlacklisted(token: string): Promise<boolean> {
+        const result = await this.redis.get(`bl:${token}`);
+        return !!result;
     }
     async generateOTP(): Promise<string> {
         return crypto.randomInt(100000, 999999).toString();
     }
     async register(data: RegisterDto) {
         try {
-            const existingUser = await this.prisma.user.findUnique({where: { email: data.email }})
+            const existingUser = await this.prisma.user.findUnique({ where: { email: data.email } })
             if (existingUser) {
                 throw new BadRequestException('Email already in use')
             }
@@ -51,7 +66,31 @@ export class AuthService {
             throw new BadRequestException(err.message)
         }
     }
+    async login(data: LoginDto) {
+        const user = await this.prisma.user.findUnique({ where: { email: data.email } })
+        if (!user) {
+            throw new UnauthorizedException("Invalid credentials")
+        }
+        if (!user.passwordHash || user.provider !== "local") {
+            throw new UnauthorizedException("Invalid credentials");
+        }
+        const passwordValid = await bcrypt.compare(data.password, user.passwordHash)
+        if (!passwordValid) {
+            throw new UnauthorizedException("Invalid credentials")
+        }
+        const token = await this.generateJWT(user)
+        return { token }
+    }
 
+    async logout(token: string) {
+        const decoded = this.jwtService.decode(token) as any;
+        const exp = decoded.exp;
+        const now = Math.floor(Date.now() / 1000);
+        const ttl = exp - now;
+        console.log(`token: ${token}\ndecoded token: ${decoded}`);
+        await this.blacklistToken(token, ttl);
+        return { message: "Logout successfully" }
+    }
     async verifyRegisterOtp(email: string, otp: string) {
         const hashedOtp = crypto
             .createHash('sha256')
@@ -80,21 +119,7 @@ export class AuthService {
         await this.mailerService.welcome(user)
         return { message: "Account verified successfully" }
     }
-    async login(data: LoginDto) {
-        const user = await this.prisma.user.findUnique({ where: { email: data.email } })
-        if (!user) {
-            throw new UnauthorizedException("Invalid credentials")
-        }
-        if (!user.passwordHash || user.provider !== "local") {
-            throw new UnauthorizedException("Invalid credentials");
-        }
-        const passwordValid = await bcrypt.compare(data.password, user.passwordHash)
-        if (!passwordValid) {
-            throw new UnauthorizedException("Invalid credentials")
-        }
-        const token = await this.generateJWT(user)
-        return { token }
-    }
+
     async forgetPassword(email: string) {
         const user = await this.prisma.user.findUnique({
             where: { email },
@@ -116,7 +141,7 @@ export class AuthService {
             },
         });
         await this.mailerService.resetPassword(user, resetToken)
-        return { message:`Reset email sent to ${email}`};
+        return { message: `Reset email sent to ${email}` };
     }
 
     async resetPassword(token: string, newPassword: string) {
@@ -188,7 +213,7 @@ export class AuthService {
                 },
             });
         }
- 
+
         return user
     }
 
