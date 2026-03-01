@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { FoldersService } from './folders.service';
+import { PrismaModule } from '../prisma.module';
 
 @Module({
-  providers: [FoldersService]
+  imports: [PrismaModule],
+  providers: [FoldersService],
 })
 export class FoldersModule {}

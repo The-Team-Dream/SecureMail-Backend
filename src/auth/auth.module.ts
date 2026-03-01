@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PrismaModule } from 'src/prisma.module';
@@ -7,6 +7,7 @@ import { NodeMailerModule } from 'src/node-mailer/node-mailer.module';
 import { PassportModule } from '@nestjs/passport';
 import { GoogleStrategy } from './strategies/google-strategy';
 import { RedisModule } from '@nestjs-modules/ioredis';
+import { SessionsModule } from 'src/sessions/sessions.module';
 
 @Module({
   imports: [
@@ -21,10 +22,11 @@ import { RedisModule } from '@nestjs-modules/ioredis';
     }),
     PassportModule,
     PrismaModule,
-    NodeMailerModule
+    NodeMailerModule,
+    forwardRef(() => SessionsModule),
   ],
   controllers: [AuthController],
   providers: [AuthService, GoogleStrategy],
-  exports:[AuthService]
+  exports: [AuthService,],
 })
-export class AuthModule { }
+export class AuthModule {}

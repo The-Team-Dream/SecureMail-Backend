@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
@@ -9,6 +9,9 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
+import { SessionsService } from 'src/sessions/sessions.service';
+
+const SESSION_EXPIRY_DAYS = 7;
 
 @Injectable()
 export class AuthService {
@@ -16,21 +19,48 @@ export class AuthService {
         private prisma: PrismaService,
         private jwtService: JwtService,
         private mailerService: NodeMailerService,
+        private sessionsService: SessionsService,
         @InjectRedis() private readonly redis: Redis
     ) { }
-    async generateJWT(user: User): Promise<string> {
-        const token = await this.jwtService.signAsync({ userId: user.id })
-        return token
-    }
-    async blacklistToken(token: string, expiresIn: number) {
-        await this.redis.set(
-            `bl:${token}`,
-            'blacklisted',
-            'EX',
-            expiresIn,
+
+    async generateJWT(
+        user: Pick<User, 'id'>,
+        sessionContext?: { ipAddress: string; userAgent: string },
+    ): Promise<string> {
+        if (!sessionContext) {
+            return this.jwtService.signAsync({ userId: user.id });
+        }
+        const expiresAt = new Date(Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+        const sessionId = await this.sessionsService.createSession({
+            userId: user.id,
+            ipAddress: sessionContext.ipAddress,
+            userAgent: sessionContext.userAgent,
+            expiresAt,
+        });
+        return this.jwtService.signAsync(
+            { userId: user.id, sessionId },
+            { expiresIn: `${SESSION_EXPIRY_DAYS}d` },
         );
     }
+
+    async blacklistToken(token: string, expiresIn: number) {
+        const decoded = this.jwtService.decode(token) as { sessionId?: number; userId?: number; exp?: number };
+        if (decoded?.sessionId && decoded?.userId) {
+            try {
+                await this.sessionsService.revokeSession(decoded.sessionId, decoded.userId);
+            } catch {
+                await this.sessionsService.blacklistSession(decoded.sessionId, new Date((decoded.exp ?? 0) * 1000));
+            }
+        } else {
+            await this.redis.set(`bl:${token}`, 'blacklisted', 'EX', expiresIn);
+        }
+    }
+
     async isBlacklisted(token: string): Promise<boolean> {
+        const decoded = this.jwtService.decode(token) as { sessionId?: number };
+        if (decoded?.sessionId) {
+            return this.sessionsService.isSessionBlacklisted(decoded.sessionId);
+        }
         const result = await this.redis.get(`bl:${token}`);
         return !!result;
     }
@@ -66,10 +96,19 @@ export class AuthService {
             throw new BadRequestException(err.message)
         }
     }
-    async login(data: LoginDto) {
+    async login(
+        data: LoginDto,
+        sessionContext?: { ipAddress: string; userAgent: string },
+    ) {
         const user = await this.prisma.user.findUnique({ where: { email: data.email } })
         if (!user) {
             throw new UnauthorizedException("Invalid credentials")
+        }
+        if (user.deletedAt) {
+            throw new UnauthorizedException("Invalid credentials")
+        }
+        if (user.bannedAt) {
+            throw new ForbiddenException("Account has been banned")
         }
         if (!user.passwordHash || user.provider !== "local") {
             throw new UnauthorizedException("Invalid credentials");
@@ -78,16 +117,50 @@ export class AuthService {
         if (!passwordValid) {
             throw new UnauthorizedException("Invalid credentials")
         }
-        const token = await this.generateJWT(user)
-        return { token }
+        if (user.totpEnabled) {
+            const tempToken = await this.jwtService.signAsync(
+                { userId: user.id, pending2FA: true },
+                { expiresIn: '5m' },
+            );
+            return { requires2FA: true, tempToken };
+        }
+        const token = await this.generateJWT(user, sessionContext);
+        return { token };
+    }
+
+    async verify2FA(
+        tempToken: string,
+        code: string,
+        sessionContext?: { ipAddress: string; userAgent: string },
+    ) {
+        const payload = await this.jwtService.verifyAsync(tempToken);
+        if (!payload.pending2FA || !payload.userId) {
+            throw new UnauthorizedException("Invalid or expired token");
+        }
+        const user = await this.prisma.user.findUnique({
+            where: { id: payload.userId },
+            select: { id: true, totpSecret: true, totpEnabled: true, bannedAt: true, deletedAt: true },
+        });
+        if (!user) throw new UnauthorizedException("Invalid or expired token");
+        if (user.deletedAt) throw new UnauthorizedException("Account has been deleted");
+        if (user.bannedAt) throw new ForbiddenException("Account has been banned");
+        if (!user.totpEnabled || !user.totpSecret) {
+            throw new UnauthorizedException("2FA not enabled for this account");
+        }
+        const { verifySync } = await import('otplib');
+        const result = verifySync({ secret: user.totpSecret, token: code });
+        if (!result.valid) {
+            throw new UnauthorizedException("Invalid TOTP code");
+        }
+        const token = await this.generateJWT({ id: user.id } as User, sessionContext);
+        return { token };
     }
 
     async logout(token: string) {
-        const decoded = this.jwtService.decode(token) as any;
-        const exp = decoded.exp;
+        const decoded = this.jwtService.decode(token) as { exp?: number };
+        const exp = decoded?.exp ?? 0;
         const now = Math.floor(Date.now() / 1000);
-        const ttl = exp - now;
-        console.log(`token: ${token}\ndecoded token: ${decoded}`);
+        const ttl = Math.max(0, exp - now);
         await this.blacklistToken(token, ttl);
         return { message: "Logout successfully" }
     }

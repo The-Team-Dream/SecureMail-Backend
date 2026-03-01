@@ -86,7 +86,6 @@ export const resetPasswordTemplate = (name: string, resetLink: string) => `<!DOC
             <a href="${resetLink}" class="button">
                 Reset Password →
             </a>
-
             <p style="margin-top: 20px;">
                 If you didn’t request a password reset, you can safely ignore this email.
             </p>

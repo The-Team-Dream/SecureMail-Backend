@@ -29,42 +29,71 @@ model User {
   oauthAccessToken     String?
   oauthRefreshToken    String?
   isVerified           Boolean        @default(false)
+  totpSecret           String?
+  totpEnabled         Boolean        @default(false)
+  role                 Role           @default(USER)
+  bannedAt             DateTime?
+  deletedAt            DateTime?
   createdAt            DateTime       @default(now())
   mailBoxes            MailBox[]
   sessions             UserSession[]
   settings             UserSetting[]
   notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@index([deletedAt])
+  @@index([bannedAt])
+}
+
+enum Role {
+  USER
+  ADMIN
 }
 
 model UserSession {
-  id           Int      @id @default(autoincrement())
-  user         User     @relation(fields: [userId], references: [id])
-  userId       Int
-  refreshToken String
-  userAgent    String
-  ipAddress    String
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        Int
+  userAgent     String
+  ipAddress     String
+  deviceOs      String?
+  deviceBrowser String?
+  loginAt       DateTime @default(now())
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model UserSetting {
-  id                   Int      @id @default(autoincrement())
-  user                 User     @relation(fields: [userId], references: [id])
-  userId               Int
-  notificationsEnabled Boolean
-  createdAt            DateTime @default(now())
+  id                   Int         @id @default(autoincrement())
+  user                 User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId               Int         @unique
+  themeMode            ThemeMode   @default(LIGHT)
+  notificationsEnabled Boolean     @default(true)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+enum ThemeMode {
+  LIGHT
+  DARK
 }
 
 model MailBox {
-  id            Int            @id @default(autoincrement())
-  user          User           @relation(fields: [userId], references: [id])
-  userId        Int
-  emailAddress  String
-  provider      EmailProviders
-  displayName   String
-  isActive      Boolean
-  lastSyncedAt  DateTime
-  createdAt     DateTime
+  id                       Int             @id @default(autoincrement())
+  user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                   Int
+  provider                 EmailProviders?
+  emailAddress             String?
+  displayName              String
+  isActive                 Boolean         @default(true)
+  pushNotificationsEnabled Boolean         @default(true)
+  lastSyncedAt             DateTime        @default(now())
+  createdAt                DateTime        @default(now())
   imapConfig    ImapConfig?
   smtpConfig    SmtpConfig?
   oauthToken    OauthToken?
@@ -82,14 +111,15 @@ enum EmailProviders {
 }
 
 model ImapConfig {
-  id        Int          @id @default(autoincrement())
-  mailBox   MailBox      @relation(fields: [mailBoxId], references: [id])
-  mailBoxId Int          @unique
-  host      String
-  port      Int
-  secure    Boolean
-  authType  ImapAuthType
-  createdAt DateTime     @default(now())
+  id                Int          @id @default(autoincrement())
+  mailBox           MailBox      @relation(fields: [mailBoxId], references: [id], onDelete: Cascade)
+  mailBoxId         Int          @unique
+  host              String
+  port              Int
+  secure            Boolean
+  authType          ImapAuthType
+  passwordEncrypted String?
+  createdAt         DateTime     @default(now())
 }
 
 enum ImapAuthType {
@@ -98,14 +128,15 @@ enum ImapAuthType {
 }
 
 model SmtpConfig {
-  id        Int          @id @default(autoincrement())
-  mailBox   MailBox      @relation(fields: [mailBoxId], references: [id])
-  mailBoxId Int          @unique
-  host      String
-  port      Int
-  secure    String
-  authType  SmtpAuthType
-  createdAt DateTime     @default(now())
+  id                 Int          @id @default(autoincrement())
+  mailBox            MailBox      @relation(fields: [mailBoxId], references: [id], onDelete: Cascade)
+  mailBoxId          Int          @unique
+  host               String
+  port               Int
+  secure             Boolean
+  authType           SmtpAuthType
+  passwordEncrypted  String?       @map("password_encrypted")
+  createdAt          DateTime     @default(now())
 }
 
 enum SmtpAuthType {
@@ -115,7 +146,7 @@ enum SmtpAuthType {
 
 model OauthToken {
   id                    Int      @id @default(autoincrement())
-  mailBox               MailBox  @relation(fields: [mailBoxId], references: [id])
+  mailBox               MailBox  @relation(fields: [mailBoxId], references: [id], onDelete: Cascade)
   mailBoxId             Int      @unique
   provider              String
   accessTokenEncrypted  String
@@ -127,7 +158,7 @@ model OauthToken {
 
 model Folder {
   id        Int        @id @default(autoincrement())
-  mailBox   MailBox    @relation(fields: [mailBoxId], references: [id])
+  mailBox   MailBox    @relation(fields: [mailBoxId], references: [id], onDelete: Cascade)
   mailBoxId Int
   name      String
   type      FolderType
@@ -143,46 +174,50 @@ enum FolderType {
   INBOX
   SENT
   SPAM
+  PHISHING
   TRASH
   CUSTOM
 }
 
 model Email {
-  id            Int             @id @default(autoincrement())
-  mailBox       MailBox         @relation(fields: [mailBoxId], references: [id])
-  mailBoxId     Int
-  folder        Folder          @relation(fields: [folderId], references: [id])
-  folderId      Int
-  messageId     String
-  subject       String
-  recipientType RecipientType[]
-  bodyText      String
-  bodyHtml      String
-  isRead        Boolean
-  isFlagged     Boolean
-  isSpam        Boolean
-  receivedAt    DateTime
-  createdAt     DateTime        @default(now())
-  emailFlag     EmailFlag?
-  attachments   Attachment[]
-  notifications Notification[]
+  id              Int             @id @default(autoincrement())
+  mailBox         MailBox         @relation(fields: [mailBoxId], references: [id], onDelete: Cascade)
+  mailBoxId       Int
+  folder          Folder          @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folderId        Int
+  messageId       String
+  subject         String          @default("")
+  fromAddr        String          @map("from_addr")
+  fromName        String?         @map("from_name")
+  toAddr          Json            @map("to_addr")
+  ccAddr          Json?           @map("cc_addr")
+  bccAddr         Json?           @map("bcc_addr")
+  bodyText        String?         @map("body_text")
+  bodyHtml        String?         @map("body_html")
+  isRead          Boolean         @default(false)
+  isFlagged       Boolean         @default(false)
+  isSpam          Boolean         @default(false)
+  isPhishing      Boolean         @default(false) @map("is_phishing")
+  spamScore       Int             @default(0) @map("spam_score")
+  phishingScore   Int             @default(0) @map("phishing_score")
+  inReplyTo       String?         @map("in_reply_to")
+  references      String?         @map("references")
+  receivedAt      DateTime
+  createdAt       DateTime        @default(now())
+  emailFlag       EmailFlag?
+  attachments     Attachment[]
+  notifications   Notification[]
 
+  @@unique([mailBoxId, folderId, messageId])
   @@index([mailBoxId])
   @@index([folderId])
   @@index([receivedAt])
   @@index([messageId])
 }
 
-enum RecipientType {
-  FROM
-  TO
-  CC
-  BCC
-}
-
 model EmailFlag {
   id        Int           @id @default(autoincrement())
-  email     Email         @relation(fields: [emailId], references: [id])
+  email     Email         @relation(fields: [emailId], references: [id], onDelete: Cascade)
   emailId   Int           @unique
   type      EmailFlagType
   createdAt DateTime      @default(now())
@@ -196,46 +231,78 @@ enum EmailFlagType {
 
 model Attachment {
   id          Int      @id @default(autoincrement())
-  email       Email    @relation(fields: [emailId], references: [id])
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
   emailId     Int
-  mimiType    String
+  mimeType    String   @map("mime_type")
+  filename    String?
   size        Int
-  storagePath String
+  storagePath String   @map("storage_path")
   createdAt   DateTime @default(now())
 }
 
 model Notification {
   id        Int              @id @default(autoincrement())
-  user      User             @relation(fields: [userId], references: [id])
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    Int
-  mailBox   MailBox          @relation(fields: [mailBoxId], references: [id])
-  mailBoxId Int
-  email     Email            @relation(fields: [emailId], references: [id])
-  emailId   Int
   type      NotificationType
+  title     String
+  message   String
   isRead    Boolean          @default(false)
+  metadata  Json?
+  mailBox   MailBox?         @relation(fields: [mailBoxId], references: [id], onDelete: Cascade)
+  mailBoxId Int?
+  email     Email?           @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  emailId   Int?
   createdAt DateTime         @default(now())
 
   @@index([mailBoxId])
   @@index([userId])
   @@index([isRead])
+  @@index([createdAt])
 }
 
 enum NotificationType {
-  NEW_EMAIL
-  SECURITY_ALERT
+  NEW_LOGIN_DETECTED
+  LOW_MAILBOX_SPACE
+  PASSWORD_CHANGED
+  WEEKLY_SECURITY_REPORT
+  NEW_EMAIL_RECEIVED
+  PHISHING_DETECTED
 }
 
 model SyncLog {
   id           Int        @id @default(autoincrement())
-  mailBox      MailBox    @relation(fields: [mailBoxId], references: [id])
+  mailBox      MailBox    @relation(fields: [mailBoxId], references: [id], onDelete: Cascade)
   mailBoxId    Int
   status       SyncStatus
-  errorMessage String
+  errorMessage String?
   syncedAt     DateTime
 }
 
 enum SyncStatus {
   SUCCESS
   FAILED
+}
+
+model AuditLog {
+  id         Int        @id @default(autoincrement())
+  admin      User       @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  adminId    Int
+  action     String
+  targetType AuditTargetType
+  targetId   Int?
+  details    Json?
+  createdAt  DateTime   @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([targetType])
+  @@index([createdAt])
+}
+
+enum AuditTargetType {
+  USER
+  MAILBOX
+  EMAIL
+  NOTIFICATION
 }

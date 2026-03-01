@@ -1,0 +1,46 @@
+import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { MailboxesController } from './mailboxes.controller';
+import { MailboxesService } from './mailboxes.service';
+import { EmailSyncService } from './email-sync.service';
+import { EmailSyncProcessor } from './email-sync.processor';
+import { EmailSyncScheduler } from './email-sync.scheduler';
+import { PrismaModule } from '../prisma.module';
+import { AuthModule } from '../auth/auth.module';
+import { ClassificationModule } from '../classification/classification.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
+import { GmailProvider } from './providers/gmail.provider';
+import { OutlookProvider } from './providers/outlook.provider';
+import { ImapProvider } from './providers/imap.provider';
+import { EMAIL_SYNC_QUEUE } from './email-sync.service';
+
+@Module({
+  imports: [
+    PrismaModule,
+    AuthModule,
+    ClassificationModule,
+    NotificationsModule,
+    AnalyticsModule,
+    BullModule.registerQueue({
+      name: EMAIL_SYNC_QUEUE,
+      defaultJobOptions: {
+        removeOnComplete: 100,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+      },
+    }),
+  ],
+  controllers: [MailboxesController],
+  providers: [
+    MailboxesService,
+    EmailSyncService,
+    EmailSyncProcessor,
+    EmailSyncScheduler,
+    GmailProvider,
+    OutlookProvider,
+    ImapProvider,
+  ],
+  exports: [MailboxesService, EmailSyncService],
+})
+export class MailboxesModule {}

@@ -37,16 +37,28 @@ export class TokenGuard implements CanActivate {
         where: { id: payload.userId },
         select: {
           id: true,
-          isVerified: true, 
+          isVerified: true,
+          role: true,
+          bannedAt: true,
+          deletedAt: true,
         }
       });
       if (!user) {
         throw new UnauthorizedException();
       }
-      if (!user?.isVerified) {
+      if (user.deletedAt) {
+        throw new UnauthorizedException('Account has been deleted');
+      }
+      if (user.bannedAt) {
+        throw new ForbiddenException('Account has been banned');
+      }
+      if (!user.isVerified) {
         throw new ForbiddenException('Account not verified');
       }
       request['user'] = user
+      if (payload.sessionId) {
+        request['sessionId'] = payload.sessionId
+      }
     } catch {
       throw new UnauthorizedException()
     }
