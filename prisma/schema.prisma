@@ -177,6 +177,7 @@ enum FolderType {
   PHISHING
   TRASH
   CUSTOM
+  MALWARE
 }
 
 model Email {
@@ -200,6 +201,10 @@ model Email {
   isPhishing      Boolean         @default(false) @map("is_phishing")
   spamScore       Int             @default(0) @map("spam_score")
   phishingScore   Int             @default(0) @map("phishing_score")
+  malwareScore    Int?            @map("malware_score")
+  malwareVerdict  String?         @map("malware_verdict")
+  malwareSeverity String?         @map("malware_severity")
+  aiReport        Json?           @map("ai_report")
   inReplyTo       String?         @map("in_reply_to")
   references      String?         @map("references")
   receivedAt      DateTime
@@ -268,6 +273,7 @@ enum NotificationType {
   WEEKLY_SECURITY_REPORT
   NEW_EMAIL_RECEIVED
   PHISHING_DETECTED
+  MALWARE_DETECTED
 }
 
 model SyncLog {
