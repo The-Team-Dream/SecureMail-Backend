@@ -10,6 +10,8 @@ import { AuthModule } from '../auth/auth.module';
 import { ClassificationModule } from '../classification/classification.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { AiAgentModule } from '../ai-agent/ai-agent.module';
+import { MalwareModule } from '../malware/malware.module';
 import { GmailProvider } from './providers/gmail.provider';
 import { OutlookProvider } from './providers/outlook.provider';
 import { ImapProvider } from './providers/imap.provider';
@@ -22,6 +24,8 @@ import { EMAIL_SYNC_QUEUE } from './email-sync.service';
     ClassificationModule,
     NotificationsModule,
     AnalyticsModule,
+    AiAgentModule,
+    MalwareModule,
     BullModule.registerQueue({
       name: EMAIL_SYNC_QUEUE,
       defaultJobOptions: {
