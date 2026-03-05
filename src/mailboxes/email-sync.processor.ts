@@ -6,6 +6,8 @@ import { PrismaService } from '../prisma.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { ClassificationService } from '../classification/classification.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AiAgentService } from '../ai-agent/ai-agent.service';
+import { MalwareService } from '../malware/malware.service';
 import { GmailProvider } from './providers/gmail.provider';
 import { OutlookProvider } from './providers/outlook.provider';
 import { ImapProvider } from './providers/imap.provider';
@@ -28,6 +30,8 @@ export class EmailSyncProcessor extends WorkerHost {
     private encryption: EncryptionService,
     private classificationService: ClassificationService,
     private notificationsService: NotificationsService,
+    private aiAgentService: AiAgentService,
+    private malwareService: MalwareService,
     private configService: ConfigService,
     private gmailProvider: GmailProvider,
     private outlookProvider: OutlookProvider,
@@ -213,7 +217,7 @@ export class EmailSyncProcessor extends WorkerHost {
         isSpam: msg.labelIds?.includes('SPAM') ?? false,
       },
     });
-    const { isPhishing } = await this.classifyAndMove(mailBoxId, email.id, createData);
+    const { isPhishing, isMalware } = await this.classifyAndMove(mailBoxId, email.id, createData, userId);
     const isNew = !existing;
 
     if (isNew && folder.type === FolderType.INBOX) {
@@ -235,7 +239,7 @@ export class EmailSyncProcessor extends WorkerHost {
         // Non-fatal
       }
     }
-    if (isPhishing) {
+    if (isPhishing && !isMalware) {
       try {
         await this.notificationsService.create({
           userId,
@@ -384,7 +388,7 @@ export class EmailSyncProcessor extends WorkerHost {
         isFlagged: msg.flag?.flagStatus === 'flagged',
       },
     });
-    const { isPhishing } = await this.classifyAndMove(mailBoxId, email.id, createData);
+    const { isPhishing, isMalware } = await this.classifyAndMove(mailBoxId, email.id, createData, userId);
     const isNew = !existingOutlook;
     if (isNew && folder.type === FolderType.INBOX) {
       try {
@@ -399,7 +403,7 @@ export class EmailSyncProcessor extends WorkerHost {
         });
       } catch {}
     }
-    if (isPhishing) {
+    if (isPhishing && !isMalware) {
       try {
         await this.notificationsService.create({
           userId,
@@ -503,7 +507,7 @@ export class EmailSyncProcessor extends WorkerHost {
               isFlagged: msg.flags.has('\\Flagged'),
             },
           });
-          const { isPhishing } = await this.classifyAndMove(mailBox.id, email.id, createData);
+          const { isPhishing, isMalware } = await this.classifyAndMove(mailBox.id, email.id, createData, mailBox.userId);
           const isNew = !existingImap;
           if (isNew && type === 'INBOX') {
             try {
@@ -518,7 +522,7 @@ export class EmailSyncProcessor extends WorkerHost {
               });
             } catch {}
           }
-          if (isPhishing) {
+          if (isPhishing && !isMalware) {
             try {
               await this.notificationsService.create({
                 userId: mailBox.userId,
@@ -548,8 +552,11 @@ export class EmailSyncProcessor extends WorkerHost {
       bodyText?: string | null;
       bodyHtml?: string | null;
     },
-  ): Promise<{ isPhishing: boolean }> {
-    const result = this.classificationService.classify({
+    userId: number,
+  ): Promise<{ isPhishing: boolean; isMalware: boolean }> {
+
+    // ── Step 1: Content-based classification ──────────────────────────
+    const classification = this.classificationService.classify({
       subject: emailData.subject,
       fromAddr: emailData.fromAddr,
       fromName: emailData.fromName ?? undefined,
@@ -557,25 +564,82 @@ export class EmailSyncProcessor extends WorkerHost {
       bodyHtml: emailData.bodyHtml,
     });
 
-    const updateData: {
-      spamScore: number;
-      phishingScore: number;
-      isSpam?: boolean;
-      isPhishing?: boolean;
-      folderId?: number;
-    } = {
-      spamScore: result.spamScore,
-      phishingScore: result.phishingScore,
+    // ── Step 2: Malware scan on attachments ───────────────────────────
+    let malwareVerdict: string | null = null;
+    let malwareScore: number | null = null;
+    let malwareSeverity: string | null = null;
+
+    const attachments = await this.prisma.attachment.findMany({
+      where: { emailId },
+      select: { storagePath: true, filename: true, mimeType: true },
+    });
+
+    if (attachments.length > 0) {
+      // Scan all attachments — worst verdict wins
+      let worstScore = 0;
+      let worstVerdict = 'clean';
+      let worstSeverity = 'Low';
+
+      for (const att of attachments) {
+        const result = await this.malwareService.analyzeFile({
+          storagePath: att.storagePath,
+          filename: att.filename ?? 'unknown',
+          mimeType: att.mimeType,
+        });
+
+        if (result && result.score > worstScore) {
+          worstScore = result.score;
+          worstVerdict = result.verdict;
+          worstSeverity = result.severity;
+        }
+      }
+
+      malwareVerdict = worstVerdict;
+      malwareScore = worstScore;
+      malwareSeverity = worstSeverity;
+    }
+
+    // ── Step 3: AI Final Report ───────────────────────────────────────
+    const aiReport = await this.aiAgentService.generateReport({
+      subject: emailData.subject ?? '',
+      fromAddr: emailData.fromAddr ?? '',
+      bodyText: emailData.bodyText ?? '',
+      spamScore: classification.spamScore,
+      phishingScore: classification.phishingScore,
+      hasAttachment: attachments.length > 0,
+      malwareVerdict: malwareVerdict ?? '',
+      malwareScore: malwareScore ?? 0,
+      malwareSeverity: malwareSeverity ?? '',
+    });
+
+    // ── Step 4: Determine folder ──────────────────────────────────────
+    const isMalware = malwareVerdict === 'malicious';
+    const isPhishing = classification.isPhishing;
+    const isSpam = classification.isSpam;
+
+    let targetFolderType: FolderType | null = null;
+    if (isMalware) {
+      targetFolderType = FolderType.MALWARE;
+    } else if (isPhishing) {
+      targetFolderType = FolderType.PHISHING;
+    } else if (isSpam) {
+      targetFolderType = FolderType.SPAM;
+    }
+
+    const updateData: Record<string, unknown> = {
+      spamScore: classification.spamScore,
+      phishingScore: classification.phishingScore,
+      isSpam: isSpam && !isMalware && !isPhishing,
+      isPhishing: isPhishing && !isMalware,
+      malwareScore,
+      malwareVerdict,
+      malwareSeverity,
+      aiReport: aiReport ?? null,
     };
 
-    if (result.isPhishing) {
-      const phishingFolder = await this.getOrCreateFolder(mailBoxId, FolderType.PHISHING);
-      updateData.folderId = phishingFolder.id;
-      updateData.isPhishing = true;
-    } else if (result.isSpam) {
-      const spamFolder = await this.getOrCreateFolder(mailBoxId, FolderType.SPAM);
-      updateData.folderId = spamFolder.id;
-      updateData.isSpam = true;
+    if (targetFolderType) {
+      const folder = await this.getOrCreateFolder(mailBoxId, targetFolderType);
+      updateData.folderId = folder.id;
     }
 
     await this.prisma.email.update({
@@ -583,7 +647,29 @@ export class EmailSyncProcessor extends WorkerHost {
       data: updateData,
     });
 
-    return { isPhishing: !!result.isPhishing };
+    // ── Step 5: Notifications ─────────────────────────────────────────
+    if (isMalware) {
+      try {
+        await this.notificationsService.create({
+          userId,
+          type: NotificationType.MALWARE_DETECTED,
+          title: 'Malware Detected',
+          message: `Malicious attachment detected in: ${emailData.subject || '(No subject)'}`,
+          metadata: {
+            emailId,
+            subject: emailData.subject,
+            fromAddr: emailData.fromAddr,
+            malwareVerdict,
+            malwareScore,
+            malwareSeverity,
+          },
+          mailBoxId,
+          emailId,
+        });
+      } catch { /* non-fatal */ }
+    }
+
+    return { isPhishing, isMalware };
   }
 
   private async checkLowMailboxSpace(mailBox: { id: number; userId: number }): Promise<void> {

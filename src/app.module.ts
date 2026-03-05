@@ -23,6 +23,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EncryptionModule } from './common/encryption/encryption.module';
 import { join } from 'path';
+import { AiAgentModule } from './ai-agent/ai-agent.module';
+import { MalwareModule } from './malware/malware.module';
 
 @Module({
   imports: [
@@ -63,6 +65,8 @@ import { join } from 'path';
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
     }),
+    AiAgentModule,
+    MalwareModule,
   ],
   controllers: [AppController],
   providers: [
