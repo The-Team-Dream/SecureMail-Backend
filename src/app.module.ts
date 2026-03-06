@@ -25,6 +25,7 @@ import { EncryptionModule } from './common/encryption/encryption.module';
 import { join } from 'path';
 import { AiAgentModule } from './ai-agent/ai-agent.module';
 import { MalwareModule } from './malware/malware.module';
+import { ProtoModule } from './proto/proto.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { MalwareModule } from './malware/malware.module';
     }),
     AiAgentModule,
     MalwareModule,
+    ProtoModule,
   ],
   controllers: [AppController],
   providers: [

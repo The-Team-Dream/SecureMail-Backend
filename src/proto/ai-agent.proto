@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package aiagent;
+
+service AIAgentService {
+  rpc GenerateReport (EmailAnalysisRequest) returns (AnalysisReport);
+}
+
+message EmailAnalysisRequest {
+  string subject         = 1;
+  string from_addr       = 2;
+  string body_text       = 3;
+  int32  spam_score      = 4;
+  int32  phishing_score  = 5;
+  bool   has_attachment  = 6;
+  string malware_verdict = 7;
+  int32  malware_score   = 8;
+  string malware_severity = 9;
+}
+
+message AnalysisReport {
+  string title          = 1;
+  string verdict        = 2;
+  string severity       = 3;
+  float  confidence     = 4;
+  string recommendation = 5;
+}

@@ -11,7 +11,7 @@ import { AiAgentService } from './ai-agent.service';
         transport: Transport.GRPC,
         options: {
           package: 'aiagent',
-          protoPath: join(__dirname, '../proto/ai-agent.proto'),
+          protoPath: join(process.cwd(), 'src/proto/ai-agent.proto'),
           url: process.env.AI_AGENT_GRPC_URL ?? 'localhost:50051',
         },
       },

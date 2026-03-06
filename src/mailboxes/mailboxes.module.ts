@@ -8,7 +8,7 @@ import { EmailSyncScheduler } from './email-sync.scheduler';
 import { PrismaModule } from '../prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { ClassificationModule } from '../classification/classification.module';
-import { NotificationsModule } from '../notifications/notifications.module';
+import { NotificationsModule } from '../notifications/notifications.module'; 
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AiAgentModule } from '../ai-agent/ai-agent.module';
 import { MalwareModule } from '../malware/malware.module';
