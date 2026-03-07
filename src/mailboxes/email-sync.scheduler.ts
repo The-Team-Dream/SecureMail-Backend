@@ -6,7 +6,7 @@ import { EmailSyncService } from './email-sync.service';
 export class EmailSyncScheduler {
   constructor(private emailSyncService: EmailSyncService) {}
 
-  @Cron('*/15 * * * *') // Every 15 minutes
+  @Cron('*/30 * * * * *') // Every 30 seconds
   async handleScheduledSync() {
     await this.emailSyncService.scheduleSyncAll();
   }

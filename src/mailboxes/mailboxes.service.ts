@@ -25,13 +25,15 @@ export class MailboxesService {
     private gmailProvider: GmailProvider,
     private outlookProvider: OutlookProvider,
     private imapProvider: ImapProvider,
-  ) {}
+  ) { }
 
   async findAll(userId: number) {
     const mailboxes = await this.prisma.mailBox.findMany({
       where: { userId },
       include: {
         folders: true,
+        oauthToken: true,
+        imapConfig: true,
         _count: { select: { emails: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -254,6 +256,8 @@ export class MailboxesService {
       where: { id, userId },
       include: {
         folders: true,
+        oauthToken: true,
+        imapConfig: true,
         _count: { select: { emails: true } },
       },
     });

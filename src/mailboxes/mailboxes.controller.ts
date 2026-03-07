@@ -51,7 +51,7 @@ export class MailboxesController {
   ) {
     return this.mailboxesService.getGmailAuthUrl(
       req.user.id,
-      redirectUri || `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/mailboxes/gmail/callback`,
+      redirectUri || `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/mailboxes/gmail/callback`,
     );
   }
 
@@ -75,7 +75,7 @@ export class MailboxesController {
   ) {
     return this.mailboxesService.getOutlookAuthUrl(
       req.user.id,
-      redirectUri || `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/mailboxes/outlook/callback`,
+      redirectUri || `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/mailboxes/outlook/callback`,
     );
   }
 

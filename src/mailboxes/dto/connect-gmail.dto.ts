@@ -12,9 +12,9 @@ export class ConnectGmailDto {
 
   @ApiProperty({
     description: 'Redirect URI used in the OAuth flow (must match Google Console)',
-    example: 'http://localhost:3001/mailboxes/gmail/callback',
+    example: 'http://localhost:3000/mailboxes/gmail/callback',
   })
   @IsString()
-  @IsUrl()
+  // @IsUrl()
   redirectUri: string;
 }
