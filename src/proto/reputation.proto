@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package reputationservice;
+
+service ReputationService {
+  rpc CheckReputation (ReputationRequest) returns (ReputationResponse);
+}
+
+message ReputationRequest {
+  string sender_ip       = 1;
+  string sender_domain   = 2;
+  repeated string urls   = 3;
+  repeated string attachment_hashes = 4;
+}
+
+message ReputationResponse {
+  string ip_reputation     = 1;
+  string domain_reputation = 2;
+  string url_reputation    = 3;
+  string hash_reputation   = 4;
+  int32  threat_score      = 5;
+  string details           = 6;
+}

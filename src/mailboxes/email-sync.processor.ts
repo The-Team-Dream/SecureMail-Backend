@@ -1,140 +1,164 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../prisma.service';
-import { EncryptionService } from '../common/encryption/encryption.service';
-import { ClassificationService } from '../classification/classification.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { AiAgentService } from '../ai-agent/ai-agent.service';
-import { MalwareService } from '../malware/malware.service';
-import { GmailProvider } from './providers/gmail.provider';
-import { OutlookProvider } from './providers/outlook.provider';
-import { ImapProvider } from './providers/imap.provider';
-import { MailboxesService } from './mailboxes.service';
-import { EmailProviders } from 'generated/prisma/enums';
-import { FolderType } from 'generated/prisma/enums';
-import { SyncStatus } from 'generated/prisma/enums';
-import { NotificationType } from 'generated/prisma/enums';
-import { google } from 'googleapis';
+// ─────────────────────────────────────────────────────────────────────────────
+// mailboxes/email-sync.processor.ts  (UPDATED v3)
+//
+// Email Sync Processor — BullMQ Worker
+//
+// Notification responsibility split:
+//   - NEW_EMAIL_RECEIVED       → processor (only it knows if email is new)
+//   - MALWARE_DETECTED         → SecurityService
+//   - PHISHING_DETECTED        → SecurityService
+//   - BEHAVIORAL_ANOMALY       → SecurityService
+//   - LOW_MAILBOX_SPACE        → processor (storage check is in sync, not security)
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { Processor, WorkerHost }   from '@nestjs/bullmq';
+import { Job }                      from 'bullmq';
+import { Injectable, Logger }       from '@nestjs/common';
+import { ConfigService }            from '@nestjs/config';
+import { PrismaService }            from '../prisma.service';
+import { EncryptionService }        from '../common/encryption/encryption.service';
+import { NotificationsService }     from '../notifications/notifications.service';
+import { GmailProvider }            from './providers/gmail.provider';
+import { OutlookProvider }          from './providers/outlook.provider';
+import { ImapProvider }             from './providers/imap.provider';
+import { MailboxesService }         from './mailboxes.service';
+import { SecurityService, SecurityPipelineInput } from '../security/security.service';
+import { EmailProviders, FolderType, SyncStatus, NotificationType } from 'generated/prisma/enums';
+import { google }                   from 'googleapis';
 
 export const EMAIL_SYNC_QUEUE = 'email-sync';
 
 const DEFAULT_STORAGE_LIMIT_BYTES = 1073741824; // 1GB
 
+// ─── Internal email data shape (provider-agnostic) ───────────────────────────
+interface NormalizedEmailData {
+  messageId:  string;
+  subject:    string;
+  fromAddr:   string;
+  fromName:   string | null;
+  toAddr:     string[];
+  ccAddr?:    string[];
+  bccAddr?:   string[];
+  bodyText:   string | null;
+  bodyHtml:   string | null;
+  receivedAt: Date;
+  isRead:     boolean;
+  isFlagged:  boolean;
+  isSpam:     boolean;
+}
+
 @Processor(EMAIL_SYNC_QUEUE)
 @Injectable()
 export class EmailSyncProcessor extends WorkerHost {
+  private readonly logger = new Logger(EmailSyncProcessor.name);
+
   constructor(
-    private prisma: PrismaService,
-    private encryption: EncryptionService,
-    private classificationService: ClassificationService,
-    private notificationsService: NotificationsService,
-    private aiAgentService: AiAgentService,
-    private malwareService: MalwareService,
-    private configService: ConfigService,
-    private gmailProvider: GmailProvider,
-    private outlookProvider: OutlookProvider,
-    private imapProvider: ImapProvider,
-    private mailboxesService: MailboxesService,
+    private readonly prisma:               PrismaService,
+    private readonly encryption:           EncryptionService,
+    private readonly securityService:      SecurityService,        // ← replaces classificationService
+    private readonly notificationsService: NotificationsService,
+    private readonly configService:        ConfigService,
+    private readonly gmailProvider:        GmailProvider,
+    private readonly outlookProvider:      OutlookProvider,
+    private readonly imapProvider:         ImapProvider,
+    private readonly mailboxesService:     MailboxesService,
   ) {
     super();
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MAIN WORKER ENTRY POINT
+  // ═══════════════════════════════════════════════════════════════════════════
 
   async process(job: Job<{ mailBoxId: number }, void, string>): Promise<void> {
     const { mailBoxId } = job.data;
     try {
       const mailBox = await this.prisma.mailBox.findUnique({
-        where: { id: mailBoxId },
+        where:   { id: mailBoxId },
         include: { folders: true, oauthToken: true, imapConfig: true },
       });
       if (!mailBox) return;
+
       if (mailBox.provider === EmailProviders.GMAIL) {
         await this.syncGmail(mailBox);
       } else if (mailBox.provider === EmailProviders.OUTLOOK) {
         await this.syncOutlook(mailBox);
       } else if (mailBox.provider === EmailProviders.CUSTOM) {
-        const imapConfig = mailBox.imapConfig;
-        if (imapConfig?.passwordEncrypted) {
+        const cfg = mailBox.imapConfig;
+        if (cfg?.passwordEncrypted) {
           await this.syncImap({
             ...mailBox,
             imapConfig: {
-              host: imapConfig.host,
-              port: imapConfig.port,
-              secure: imapConfig.secure,
-              passwordEncrypted: imapConfig.passwordEncrypted,
+              host:              cfg.host,
+              port:              cfg.port,
+              secure:            cfg.secure,
+              passwordEncrypted: cfg.passwordEncrypted,
             },
           });
         }
       }
+
       await this.prisma.syncLog.create({
-        data: {
-          mailBoxId,
-          status: SyncStatus.SUCCESS,
-          syncedAt: new Date(),
-        },
+        data: { mailBoxId, status: SyncStatus.SUCCESS, syncedAt: new Date() },
       });
       await this.prisma.mailBox.update({
         where: { id: mailBoxId },
-        data: { lastSyncedAt: new Date() },
+        data:  { lastSyncedAt: new Date() },
       });
-
       await this.checkLowMailboxSpace(mailBox);
+
     } catch (err) {
       await this.prisma.syncLog.create({
         data: {
           mailBoxId,
-          status: SyncStatus.FAILED,
+          status:       SyncStatus.FAILED,
           errorMessage: err instanceof Error ? err.message : String(err),
-          syncedAt: new Date(),
+          syncedAt:     new Date(),
         },
       });
       throw err;
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GMAIL SYNC
+  // ═══════════════════════════════════════════════════════════════════════════
+
   private async syncGmail(mailBox: {
-    id: number;
-    userId: number;
-    emailAddress: string | null;
+    id: number; userId: number; emailAddress: string | null;
     folders: { id: number; remoteId: string; type: string }[];
     oauthToken: { accessTokenEncrypted: string; refreshTokenEncrypted: string } | null;
   }) {
     if (!mailBox.oauthToken) return;
     const tokens = await this.mailboxesService.getGmailTokens(mailBox.id);
     if (!tokens) return;
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({
-      access_token: tokens.accessToken,
+      access_token:  tokens.accessToken,
       refresh_token: tokens.refreshToken,
     });
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
     const labelMap: Record<string, string> = {
       INBOX: 'INBOX',
-      SENT: 'SENT',
-      SPAM: 'SPAM',
+      SENT:  'SENT',
+      SPAM:  'SPAM',
     };
+
     for (const [folderType, labelId] of Object.entries(labelMap)) {
-      let folder = mailBox.folders.find((f) => f.type === folderType);
+      let folder = mailBox.folders.find(f => f.type === folderType);
       if (!folder) {
         folder = await this.prisma.folder.create({
-          data: {
-            mailBoxId: mailBox.id,
-            name: folderType.toLowerCase(),
-            type: folderType as FolderType,
-            remoteId: labelId,
-          },
+          data: { mailBoxId: mailBox.id, name: folderType.toLowerCase(), type: folderType as FolderType, remoteId: labelId },
         });
       }
-      const { messages } = await this.gmailProvider.listMessages(
-        gmail,
-        'me',
-        [labelId],
-        100,
-      );
+
+      const { messages } = await this.gmailProvider.listMessages(gmail, 'me', [labelId], 100);
+
       for (const msg of messages) {
         const full = await this.gmailProvider.getMessage(gmail, 'me', msg.id);
-        await this.upsertGmailEmail(
+        await this.processGmailMessage(
           { id: mailBox.id, userId: mailBox.userId },
           { id: folder.id, type: folder.type },
           full as any,
@@ -143,22 +167,23 @@ export class EmailSyncProcessor extends WorkerHost {
     }
   }
 
-  private async upsertGmailEmail(
+  private async processGmailMessage(
     mailBox: { id: number; userId: number },
-    folder: { id: number; type: string },
-    msg: { id?: string; payload?: { headers?: Array<{ name?: string; value?: string }>; body?: { data?: string }; parts?: Array<{ mimeType?: string; body?: { data?: string } }> }; internalDate?: string; labelIds?: string[] },
+    folder:  { id: number; type: string },
+    msg:     {
+      id?: string;
+      payload?: { headers?: Array<{ name?: string; value?: string }>; body?: { data?: string }; parts?: Array<{ mimeType?: string; body?: { data?: string } }> };
+      internalDate?: string;
+      labelIds?: string[];
+    },
   ) {
-    const { id: mailBoxId, userId } = mailBox;
-    const folderId = folder.id;
     const getHeader = (name: string) =>
-      msg.payload?.headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? '';
-    const messageId = msg.id ?? getHeader('Message-ID') ?? `gmail-${mailBoxId}-${folderId}-${Date.now()}`;
+      msg.payload?.headers?.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value ?? '';
+
+    const messageId = msg.id ?? getHeader('Message-ID') ?? `gmail-${mailBox.id}-${folder.id}-${Date.now()}`;
     const from = getHeader('From');
-    const to = getHeader('To');
-    const cc = getHeader('Cc');
-    const bcc = getHeader('Bcc');
-    let bodyText = '';
-    let bodyHtml = '';
+    let bodyText = '', bodyHtml = '';
+
     if (msg.payload?.body?.data) {
       const decoded = Buffer.from(msg.payload.body.data, 'base64').toString('utf8');
       if ((msg.payload as { mimeType?: string }).mimeType === 'text/html') bodyHtml = decoded;
@@ -171,137 +196,63 @@ export class EmailSyncProcessor extends WorkerHost {
         else bodyText = decoded;
       }
     }
-    const receivedAt = msg.internalDate
-      ? new Date(parseInt(msg.internalDate, 10))
-      : new Date();
-    const isRead = msg.labelIds?.includes('UNREAD') ? false : true;
-    const fromName = from.match(/^"([^"]+)"\s*</)?.[1] ?? from.match(/^([^<]+)\s*</)?.[1]?.trim() ?? null;
-    const createData = {
-      mailBoxId,
-      folderId,
-      messageId,
-      subject: getHeader('Subject'),
-      fromAddr: from,
-      fromName,
-      toAddr: to ? [to] : [],
-      ccAddr: cc ? [cc] : [],
-      bccAddr: bcc ? [bcc] : [],
-      bodyText: bodyText || null,
-      bodyHtml: bodyHtml || null,
-      isRead,
-      isFlagged: msg.labelIds?.includes('STARRED') ?? false,
-      isSpam: msg.labelIds?.includes('SPAM') ?? false,
-      receivedAt,
-    };
-    const existing = await this.prisma.email.findUnique({
-      where: {
-        mailBoxId_folderId_messageId: {
-          mailBoxId,
-          folderId,
-          messageId,
-        },
-      },
-    });
-    const email = await this.prisma.email.upsert({
-      where: {
-        mailBoxId_folderId_messageId: {
-          mailBoxId,
-          folderId,
-          messageId,
-        },
-      },
-      create: createData,
-      update: {
-        isRead,
-        isFlagged: msg.labelIds?.includes('STARRED') ?? false,
-        isSpam: msg.labelIds?.includes('SPAM') ?? false,
-      },
-    });
-    const { isPhishing, isMalware } = await this.classifyAndMove(mailBoxId, email.id, createData, userId);
-    const isNew = !existing;
 
-    if (isNew && folder.type === FolderType.INBOX) {
-      try {
-        await this.notificationsService.create({
-          userId,
-          type: NotificationType.NEW_EMAIL_RECEIVED,
-          title: 'New Email Received',
-          message: `New email: ${createData.subject || '(No subject)'}`,
-          metadata: {
-            emailId: email.id,
-            subject: createData.subject,
-            fromAddr: createData.fromAddr,
-          },
-          mailBoxId,
-          emailId: email.id,
-        });
-      } catch {
-        // Non-fatal
-      }
-    }
-    if (isPhishing && !isMalware) {
-      try {
-        await this.notificationsService.create({
-          userId,
-          type: NotificationType.PHISHING_DETECTED,
-          title: 'Phishing Detected',
-          message: `Phishing email detected: ${createData.subject || '(No subject)'}`,
-          metadata: {
-            emailId: email.id,
-            subject: createData.subject,
-            fromAddr: createData.fromAddr,
-          },
-          mailBoxId,
-          emailId: email.id,
-        });
-      } catch {
-        // Non-fatal
-      }
-    }
+    const normalized: NormalizedEmailData = {
+      messageId,
+      subject:    getHeader('Subject'),
+      fromAddr:   from,
+      fromName:   from.match(/^"([^"]+)"\s*</)?.[1] ?? from.match(/^([^<]+)\s*</)?.[1]?.trim() ?? null,
+      toAddr:     [getHeader('To')].filter(Boolean),
+      ccAddr:     getHeader('Cc') ? [getHeader('Cc')] : undefined,
+      bccAddr:    getHeader('Bcc') ? [getHeader('Bcc')] : undefined,
+      bodyText:   bodyText || null,
+      bodyHtml:   bodyHtml || null,
+      receivedAt: msg.internalDate ? new Date(parseInt(msg.internalDate, 10)) : new Date(),
+      isRead:     !(msg.labelIds?.includes('UNREAD') ?? false),
+      isFlagged:  msg.labelIds?.includes('STARRED') ?? false,
+      isSpam:     msg.labelIds?.includes('SPAM') ?? false,
+    };
+
+    await this.upsertAndAnalyze(mailBox, folder, normalized);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OUTLOOK SYNC
+  // ═══════════════════════════════════════════════════════════════════════════
+
   private async syncOutlook(mailBox: {
-    id: number;
-    userId: number;
-    emailAddress: string | null;
+    id: number; userId: number; emailAddress: string | null;
     folders: { id: number; remoteId: string; type: string }[];
     oauthToken: { accessTokenEncrypted: string; refreshTokenEncrypted: string } | null;
   }) {
     if (!mailBox.oauthToken) return;
     const tokens = await this.mailboxesService.getOutlookTokens(mailBox.id);
     if (!tokens) return;
+
     const client = this.outlookProvider.getGraphClient(tokens.accessToken);
     const folderMap: Record<string, string> = {
       INBOX: 'inbox',
-      SENT: 'sentitems',
-      SPAM: 'junkemail',
+      SENT:  'sentitems',
+      SPAM:  'junkemail',
     };
+
     for (const [type, graphId] of Object.entries(folderMap)) {
-      let folder = mailBox.folders.find((f) => f.type === type);
+      let folder = mailBox.folders.find(f => f.type === type);
       if (!folder) {
         try {
-          const res = await client.api(`/me/mailFolders/${graphId}`).get();
+          const res    = await client.api(`/me/mailFolders/${graphId}`).get();
           const remoteId = (res as { id?: string }).id ?? graphId;
           folder = await this.prisma.folder.create({
-            data: {
-              mailBoxId: mailBox.id,
-              name: type.toLowerCase(),
-              type: type as FolderType,
-              remoteId,
-            },
+            data: { mailBoxId: mailBox.id, name: type.toLowerCase(), type: type as FolderType, remoteId },
           });
-        } catch {
-          continue;
-        }
+        } catch { continue; }
       }
-      const { messages } = await this.outlookProvider.listMessages(
-        client,
-        folder.remoteId,
-        100,
-      );
+
+      const { messages } = await this.outlookProvider.listMessages(client, folder.remoteId, 100);
+
       for (const m of messages) {
         const full = await this.outlookProvider.getMessage(client, m.id);
-        await this.upsertOutlookEmail(
+        await this.processOutlookMessage(
           { id: mailBox.id, userId: mailBox.userId },
           { id: folder.id, type: folder.type },
           full,
@@ -310,231 +261,97 @@ export class EmailSyncProcessor extends WorkerHost {
     }
   }
 
-  private async upsertOutlookEmail(
+  private async processOutlookMessage(
     mailBox: { id: number; userId: number },
-    folder: { id: number; type: string },
-    msg: {
-      id?: string;
-      subject?: string;
+    folder:  { id: number; type: string },
+    msg:     {
+      id?: string; subject?: string;
       from?: { emailAddress?: { address?: string; name?: string } };
-      toRecipients?: Array<{ emailAddress?: { address?: string; name?: string } }>;
-      ccRecipients?: Array<{ emailAddress?: { address?: string; name?: string } }>;
-      bccRecipients?: Array<{ emailAddress?: { address?: string; name?: string } }>;
+      toRecipients?:  Array<{ emailAddress?: { address?: string } }>;
+      ccRecipients?:  Array<{ emailAddress?: { address?: string } }>;
+      bccRecipients?: Array<{ emailAddress?: { address?: string } }>;
       body?: { content?: string; contentType?: string };
-      bodyPreview?: string;
-      receivedDateTime?: string;
-      isRead?: boolean;
-      flag?: { flagStatus?: string };
+      bodyPreview?: string; receivedDateTime?: string;
+      isRead?: boolean; flag?: { flagStatus?: string };
     },
   ) {
-    const { id: mailBoxId, userId } = mailBox;
-    const folderId = folder.id;
-    const messageId = msg.id ?? `outlook-${mailBoxId}-${folderId}-${Date.now()}`;
     const from = msg.from?.emailAddress
       ? `${msg.from.emailAddress.name ? `"${msg.from.emailAddress.name}" ` : ''}<${msg.from.emailAddress.address}>`
       : '';
-    const to = (msg.toRecipients ?? []).map((r) => r.emailAddress?.address ?? '');
-    const cc = (msg.ccRecipients ?? []).map((r) => r.emailAddress?.address ?? '');
-    const bcc = (msg.bccRecipients ?? []).map((r) => r.emailAddress?.address ?? '');
-    const bodyHtml = msg.body?.contentType === 'html' ? msg.body.content : null;
-    const bodyText = msg.body?.contentType === 'text' ? msg.body.content : msg.bodyPreview ?? null;
-    const receivedAt = msg.receivedDateTime
-      ? new Date(msg.receivedDateTime)
-      : new Date();
-    const fromName = msg.from?.emailAddress?.name ?? null;
-    const createData = {
-      subject: msg.subject ?? '',
-      fromAddr: from,
-      fromName,
-      bodyText,
-      bodyHtml,
+
+    const normalized: NormalizedEmailData = {
+      messageId:  msg.id ?? `outlook-${mailBox.id}-${folder.id}-${Date.now()}`,
+      subject:    msg.subject ?? '',
+      fromAddr:   from,
+      fromName:   msg.from?.emailAddress?.name ?? null,
+      toAddr:     (msg.toRecipients ?? []).map(r => r.emailAddress?.address ?? '').filter(Boolean),
+      ccAddr:     (msg.ccRecipients  ?? []).map(r => r.emailAddress?.address ?? '').filter(Boolean),
+      bccAddr:    (msg.bccRecipients ?? []).map(r => r.emailAddress?.address ?? '').filter(Boolean),
+      bodyText:   msg.body?.contentType === 'text' ? msg.body.content ?? null : msg.bodyPreview ?? null,
+      bodyHtml:   msg.body?.contentType === 'html' ? msg.body.content ?? null : null,
+      receivedAt: msg.receivedDateTime ? new Date(msg.receivedDateTime) : new Date(),
+      isRead:     msg.isRead ?? false,
+      isFlagged:  msg.flag?.flagStatus === 'flagged',
+      isSpam:     false,
     };
-    const existingOutlook = await this.prisma.email.findUnique({
-      where: {
-        mailBoxId_folderId_messageId: {
-          mailBoxId,
-          folderId,
-          messageId,
-        },
-      },
-    });
-    const email = await this.prisma.email.upsert({
-      where: {
-        mailBoxId_folderId_messageId: {
-          mailBoxId,
-          folderId,
-          messageId,
-        },
-      },
-      create: {
-        mailBoxId,
-        folderId,
-        messageId,
-        subject: msg.subject ?? '',
-        fromAddr: from,
-        fromName,
-        toAddr: to,
-        ccAddr: cc.length ? cc : undefined,
-        bccAddr: bcc.length ? bcc : undefined,
-        bodyText,
-        bodyHtml,
-        isRead: msg.isRead ?? false,
-        isFlagged: msg.flag?.flagStatus === 'flagged',
-        isSpam: false,
-        receivedAt,
-      },
-      update: {
-        isRead: msg.isRead ?? false,
-        isFlagged: msg.flag?.flagStatus === 'flagged',
-      },
-    });
-    const { isPhishing, isMalware } = await this.classifyAndMove(mailBoxId, email.id, createData, userId);
-    const isNew = !existingOutlook;
-    if (isNew && folder.type === FolderType.INBOX) {
-      try {
-        await this.notificationsService.create({
-          userId,
-          type: NotificationType.NEW_EMAIL_RECEIVED,
-          title: 'New Email Received',
-          message: `New email: ${createData.subject || '(No subject)'}`,
-          metadata: { emailId: email.id, subject: createData.subject, fromAddr: createData.fromAddr },
-          mailBoxId,
-          emailId: email.id,
-        });
-      } catch {}
-    }
-    if (isPhishing && !isMalware) {
-      try {
-        await this.notificationsService.create({
-          userId,
-          type: NotificationType.PHISHING_DETECTED,
-          title: 'Phishing Detected',
-          message: `Phishing email detected: ${createData.subject || '(No subject)'}`,
-          metadata: { emailId: email.id, subject: createData.subject, fromAddr: createData.fromAddr },
-          mailBoxId,
-          emailId: email.id,
-        });
-      } catch {}
-    }
+
+    await this.upsertAndAnalyze(mailBox, folder, normalized);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IMAP SYNC
+  // ═══════════════════════════════════════════════════════════════════════════
+
   private async syncImap(mailBox: {
-    id: number;
-    userId: number;
-    emailAddress: string | null;
+    id: number; userId: number; emailAddress: string | null;
     folders: { id: number; remoteId: string; type: string }[];
     imapConfig: { host: string; port: number; secure: boolean; passwordEncrypted: string } | null;
   }) {
     const creds = await this.mailboxesService.getImapCredentials(mailBox.id);
     if (!creds) return;
+
     const client = await this.imapProvider.connect(creds);
     try {
       const mapping = this.imapProvider.getFolderMapping();
+
       for (const [type, remotePath] of Object.entries(mapping)) {
-        let folder = mailBox.folders.find((f) => f.type === type);
+        let folder = mailBox.folders.find(f => f.type === type);
         if (!folder) {
           folder = await this.prisma.folder.create({
-            data: {
-              mailBoxId: mailBox.id,
-              name: type.toLowerCase(),
-              type: type as FolderType,
-              remoteId: remotePath,
-            },
+            data: { mailBoxId: mailBox.id, name: type.toLowerCase(), type: type as FolderType, remoteId: remotePath },
           });
         }
-        const messages = await this.imapProvider.fetchMessages(
-          client,
-          remotePath,
-          100,
-        );
+
+        const messages = await this.imapProvider.fetchMessages(client, remotePath, 100);
+
         for (const msg of messages) {
-          const full = await this.imapProvider.fetchFullMessage(
-            client,
-            remotePath,
-            msg.uid,
-          );
-          const messageId =
-            msg.envelope.messageId ?? `imap-${mailBox.id}-${folder.id}-${msg.uid}`;
-          const from = msg.envelope.from?.[0]
+          const full      = await this.imapProvider.fetchFullMessage(client, remotePath, msg.uid);
+          const messageId = msg.envelope.messageId ?? `imap-${mailBox.id}-${folder.id}-${msg.uid}`;
+          const from      = msg.envelope.from?.[0]
             ? `${msg.envelope.from[0].name ? `"${msg.envelope.from[0].name}" ` : ''}<${msg.envelope.from[0].address}>`
             : full.from;
-          const to = (msg.envelope.to ?? []).map((a) => a.address ?? '');
-          const cc = (msg.envelope.cc ?? []).map((a) => a.address ?? '');
-          const bcc = (msg.envelope.bcc ?? []).map((a) => a.address ?? '');
-          const receivedAt = msg.envelope.date ?? full.date ?? new Date();
-          const createData = {
-            subject: msg.envelope.subject ?? full.subject ?? '',
-            fromAddr: from,
-            fromName: msg.envelope.from?.[0]?.name ?? null,
-            bodyText: full.text ?? null,
-            bodyHtml: full.html ?? null,
+
+          const normalized: NormalizedEmailData = {
+            messageId,
+            subject:   msg.envelope.subject ?? full.subject ?? '',
+            fromAddr:  from,
+            fromName:  msg.envelope.from?.[0]?.name ?? null,
+            toAddr:    (msg.envelope.to ?? []).map(a => a.address ?? '').filter(Boolean),
+            ccAddr:    (msg.envelope.cc ?? []).map(a => a.address ?? '').filter(Boolean),
+            bccAddr:   (msg.envelope.bcc ?? []).map(a => a.address ?? '').filter(Boolean),
+            bodyText:  full.text ?? null,
+            bodyHtml:  full.html ?? null,
+            receivedAt: msg.envelope.date ?? full.date ?? new Date(),
+            isRead:    msg.flags.has('\\Seen'),
+            isFlagged: msg.flags.has('\\Flagged'),
+            isSpam:    type === 'SPAM',
           };
-          const existingImap = await this.prisma.email.findUnique({
-            where: {
-              mailBoxId_folderId_messageId: {
-                mailBoxId: mailBox.id,
-                folderId: folder.id,
-                messageId,
-              },
-            },
-          });
-          const email = await this.prisma.email.upsert({
-            where: {
-              mailBoxId_folderId_messageId: {
-                mailBoxId: mailBox.id,
-                folderId: folder.id,
-                messageId,
-              },
-            },
-            create: {
-              mailBoxId: mailBox.id,
-              folderId: folder.id,
-              messageId,
-              subject: msg.envelope.subject ?? full.subject ?? '',
-              fromAddr: from,
-              toAddr: to.length ? to : [full.to.join(', ')],
-              ccAddr: cc.length ? cc : (full.cc?.length ? full.cc : undefined),
-              bccAddr: bcc.length ? bcc : (full.bcc?.length ? full.bcc : undefined),
-              bodyText: full.text ?? null,
-              bodyHtml: full.html ?? null,
-              isRead: msg.flags.has('\\Seen'),
-              isFlagged: msg.flags.has('\\Flagged'),
-              isSpam: type === 'SPAM',
-              receivedAt,
-            },
-            update: {
-              isRead: msg.flags.has('\\Seen'),
-              isFlagged: msg.flags.has('\\Flagged'),
-            },
-          });
-          const { isPhishing, isMalware } = await this.classifyAndMove(mailBox.id, email.id, createData, mailBox.userId);
-          const isNew = !existingImap;
-          if (isNew && type === 'INBOX') {
-            try {
-              await this.notificationsService.create({
-                userId: mailBox.userId,
-                type: NotificationType.NEW_EMAIL_RECEIVED,
-                title: 'New Email Received',
-                message: `New email: ${createData.subject || '(No subject)'}`,
-                metadata: { emailId: email.id, subject: createData.subject, fromAddr: createData.fromAddr },
-                mailBoxId: mailBox.id,
-                emailId: email.id,
-              });
-            } catch {}
-          }
-          if (isPhishing && !isMalware) {
-            try {
-              await this.notificationsService.create({
-                userId: mailBox.userId,
-                type: NotificationType.PHISHING_DETECTED,
-                title: 'Phishing Detected',
-                message: `Phishing email detected: ${createData.subject || '(No subject)'}`,
-                metadata: { emailId: email.id, subject: createData.subject, fromAddr: createData.fromAddr },
-                mailBoxId: mailBox.id,
-                emailId: email.id,
-              });
-            } catch {}
-          }
+
+          await this.upsertAndAnalyze(
+            { id: mailBox.id, userId: mailBox.userId },
+            { id: folder.id, type: folder.type },
+            normalized,
+          );
         }
       }
     } finally {
@@ -542,187 +359,152 @@ export class EmailSyncProcessor extends WorkerHost {
     }
   }
 
-  private async classifyAndMove(
-    mailBoxId: number,
-    emailId: number,
-    emailData: {
-      subject: string;
-      fromAddr: string;
-      fromName?: string | null;
-      bodyText?: string | null;
-      bodyHtml?: string | null;
-    },
-    userId: number,
-  ): Promise<{ isPhishing: boolean; isMalware: boolean }> {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CORE: upsertAndAnalyze — provider-agnostic email persistence + analysis
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    // ── Step 1: Content-based classification ──────────────────────────
-    const classification = this.classificationService.classify({
-      subject: emailData.subject,
-      fromAddr: emailData.fromAddr,
-      fromName: emailData.fromName ?? undefined,
-      bodyText: emailData.bodyText,
-      bodyHtml: emailData.bodyHtml,
+  /**
+   * upsertAndAnalyze()
+   *
+   * 1. Upsert email record into DB
+   * 2. Collect attachment metadata (already persisted by attachment-storage.service)
+   * 3. Call SecurityService.analyze() — full 13-stage pipeline
+   * 4. Send NEW_EMAIL_RECEIVED notification if email is new and in INBOX
+   */
+  private async upsertAndAnalyze(
+    mailBox: { id: number; userId: number },
+    folder:  { id: number; type: string },
+    data:    NormalizedEmailData,
+  ): Promise<void> {
+    const { id: mailBoxId, userId } = mailBox;
+    const folderId  = folder.id;
+    const messageId = data.messageId;
+
+    // ── 1. Check if email already exists ──────────────────────────────────────
+    const existing = await this.prisma.email.findUnique({
+      where: { mailBoxId_folderId_messageId: { mailBoxId, folderId, messageId } },
     });
 
-    // ── Step 2: Malware scan on attachments ───────────────────────────
-    let malwareVerdict: string | null = null;
-    let malwareScore: number | null = null;
-    let malwareSeverity: string | null = null;
+    // ── 2. Upsert email ────────────────────────────────────────────────────────
+    const email = await this.prisma.email.upsert({
+      where:  { mailBoxId_folderId_messageId: { mailBoxId, folderId, messageId } },
+      create: {
+        mailBoxId, folderId, messageId,
+        subject:   data.subject,
+        fromAddr:  data.fromAddr,
+        fromName:  data.fromName,
+        toAddr:    data.toAddr,
+        ccAddr:    data.ccAddr?.length  ? data.ccAddr  : undefined,
+        bccAddr:   data.bccAddr?.length ? data.bccAddr : undefined,
+        bodyText:  data.bodyText,
+        bodyHtml:  data.bodyHtml,
+        isRead:    data.isRead,
+        isFlagged: data.isFlagged,
+        isSpam:    data.isSpam,
+        receivedAt: data.receivedAt,
+      },
+      update: {
+        isRead:    data.isRead,
+        isFlagged: data.isFlagged,
+      },
+    });
 
+    // ── 3. Collect attachments (already stored by attachment-storage.service) ──
     const attachments = await this.prisma.attachment.findMany({
-      where: { emailId },
-      select: { storagePath: true, filename: true, mimeType: true },
+      where:  { emailId: email.id },
+      select: { storagePath: true, filename: true, mimeType: true, size: true },
     });
 
-    if (attachments.length > 0) {
-      // Scan all attachments — worst verdict wins
-      let worstScore = 0;
-      let worstVerdict = 'clean';
-      let worstSeverity = 'Low';
-
-      for (const att of attachments) {
-        const result = await this.malwareService.analyzeFile({
-          storagePath: att.storagePath,
-          filename: att.filename ?? 'unknown',
-          mimeType: att.mimeType,
-        });
-
-        if (result && result.score > worstScore) {
-          worstScore = result.score;
-          worstVerdict = result.verdict;
-          worstSeverity = result.severity;
-        }
-      }
-
-      malwareVerdict = worstVerdict;
-      malwareScore = worstScore;
-      malwareSeverity = worstSeverity;
-    }
-
-    // ── Step 3: AI Final Report ───────────────────────────────────────
-    const aiReport = await this.aiAgentService.generateReport({
-      subject: emailData.subject ?? '',
-      fromAddr: emailData.fromAddr ?? '',
-      bodyText: emailData.bodyText ?? '',
-      spamScore: classification.spamScore,
-      phishingScore: classification.phishingScore,
-      hasAttachment: attachments.length > 0,
-      malwareVerdict: malwareVerdict ?? '',
-      malwareScore: malwareScore ?? 0,
-      malwareSeverity: malwareSeverity ?? '',
-    });
-
-    // ── Step 4: Determine folder ──────────────────────────────────────
-    const isMalware = malwareVerdict === 'malicious';
-    const isPhishing = classification.isPhishing;
-    const isSpam = classification.isSpam;
-
-    let targetFolderType: FolderType | null = null;
-    if (isMalware) {
-      targetFolderType = FolderType.MALWARE;
-    } else if (isPhishing) {
-      targetFolderType = FolderType.PHISHING;
-    } else if (isSpam) {
-      targetFolderType = FolderType.SPAM;
-    }
-
-    const updateData: Record<string, unknown> = {
-      spamScore: classification.spamScore,
-      phishingScore: classification.phishingScore,
-      isSpam: isSpam && !isMalware && !isPhishing,
-      isPhishing: isPhishing && !isMalware,
-      malwareScore,
-      malwareVerdict,
-      malwareSeverity,
-      aiReport: aiReport ?? null,
+    // ── 4. Build SecurityPipelineInput ────────────────────────────────────────
+    const pipelineInput: SecurityPipelineInput = {
+      emailId:   email.id,
+      messageId: data.messageId,
+      mailBoxId,
+      fromAddr:  data.fromAddr,
+      fromName:  data.fromName,
+      toAddr:    data.toAddr,
+      ccAddr:    data.ccAddr ?? null,
+      bccAddr:   data.bccAddr ?? null,
+      subject:   data.subject,
+      bodyText:  data.bodyText,
+      bodyHtml:  data.bodyHtml,
+      receivedAt: data.receivedAt,
+      attachments: attachments.map(att => ({
+        filename:    att.filename  ?? 'unknown',
+        mimeType:    att.mimeType  ?? 'application/octet-stream',
+        size:        att.size      ?? 0,
+        storagePath: att.storagePath,
+      })),
     };
 
-    if (targetFolderType) {
-      const folder = await this.getOrCreateFolder(mailBoxId, targetFolderType);
-      updateData.folderId = folder.id;
-    }
+    // ── 5. Run full Security Pipeline ────────────────────────────────────────
+    // SecurityService handles: detection, scoring, DB update, and threat notifications
+    const result = await this.securityService.analyze(pipelineInput, userId);
 
-    await this.prisma.email.update({
-      where: { id: emailId },
-      data: updateData,
-    });
+    this.logger.debug(`Email ${email.id} analyzed: verdict=${result.verdict.label} score=${result.verdict.riskScore} (${result.processingMs}ms)`);
 
-    // ── Step 5: Notifications ─────────────────────────────────────────
-    if (isMalware) {
+    // ── 6. NEW_EMAIL_RECEIVED notification ────────────────────────────────────
+    // Only the processor knows if this is truly a new inbox email
+    const isNew = !existing;
+    if (isNew && folder.type === FolderType.INBOX) {
       try {
         await this.notificationsService.create({
           userId,
-          type: NotificationType.MALWARE_DETECTED,
-          title: 'Malware Detected',
-          message: `Malicious attachment detected in: ${emailData.subject || '(No subject)'}`,
+          type:    NotificationType.NEW_EMAIL_RECEIVED,
+          title:   'New Email Received',
+          message: `New email: ${data.subject || '(No subject)'}`,
           metadata: {
-            emailId,
-            subject: emailData.subject,
-            fromAddr: emailData.fromAddr,
-            malwareVerdict,
-            malwareScore,
-            malwareSeverity,
+            emailId:  email.id,
+            subject:  data.subject,
+            fromAddr: data.fromAddr,
+            verdict:  result.verdict.label,
+            score:    result.verdict.riskScore,
           },
           mailBoxId,
-          emailId,
+          emailId: email.id,
         });
-      } catch { /* non-fatal */ }
+      } catch { /* Non-fatal */ }
     }
-
-    return { isPhishing, isMalware };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STORAGE CHECK
+  // ═══════════════════════════════════════════════════════════════════════════
+
   private async checkLowMailboxSpace(mailBox: { id: number; userId: number }): Promise<void> {
-    const limitBytes =
-      this.configService.get<number>('MAILBOX_STORAGE_LIMIT_BYTES') ??
-      DEFAULT_STORAGE_LIMIT_BYTES;
-    const threshold = 0.8;
+    const limitBytes   = this.configService.get<number>('MAILBOX_STORAGE_LIMIT_BYTES') ?? DEFAULT_STORAGE_LIMIT_BYTES;
+    const threshold    = 0.8;
 
     const result = await this.prisma.attachment.aggregate({
-      where: {
-        email: { mailBoxId: mailBox.id },
-      },
-      _sum: { size: true },
+      where: { email: { mailBoxId: mailBox.id } },
+      _sum:  { size: true },
     });
-    const usedBytes = result._sum.size ?? 0;
+    const usedBytes    = result._sum.size ?? 0;
     const usagePercent = usedBytes / limitBytes;
 
     if (usagePercent >= threshold) {
       try {
         await this.notificationsService.create({
-          userId: mailBox.userId,
-          type: NotificationType.LOW_MAILBOX_SPACE,
-          title: 'Low Mailbox Space',
-          message: `Your mailbox storage is at ${Math.round(usagePercent * 100)}%. Consider cleaning up.`,
-          metadata: {
-            mailBoxId: mailBox.id,
-            usedBytes,
-            limitBytes,
-            usagePercent,
-          },
+          userId:  mailBox.userId,
+          type:    NotificationType.LOW_MAILBOX_SPACE,
+          title:   'Low Mailbox Space',
+          message: `Mailbox storage at ${Math.round(usagePercent * 100)}%. Consider cleaning up.`,
+          metadata: { mailBoxId: mailBox.id, usedBytes, limitBytes, usagePercent },
           mailBoxId: mailBox.id,
         });
-      } catch {
-        // Non-fatal
-      }
+      } catch { /* Non-fatal */ }
     }
   }
 
-  private async getOrCreateFolder(
-    mailBoxId: number,
-    type: FolderType,
-  ) {
-    let folder = await this.prisma.folder.findFirst({
-      where: { mailBoxId, type },
-    });
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FOLDER HELPER
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private async getOrCreateFolder(mailBoxId: number, type: FolderType) {
+    let folder = await this.prisma.folder.findFirst({ where: { mailBoxId, type } });
     if (!folder) {
       folder = await this.prisma.folder.create({
-        data: {
-          mailBoxId,
-          name: type.toLowerCase(),
-          type,
-          remoteId: type,
-        },
+        data: { mailBoxId, name: type.toLowerCase(), type, remoteId: type },
       });
     }
     return folder;

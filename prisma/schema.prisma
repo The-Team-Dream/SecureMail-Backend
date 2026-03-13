@@ -218,6 +218,8 @@ model Email {
   @@index([folderId])
   @@index([receivedAt])
   @@index([messageId])
+  // ARCH FIX: index for Rule 13 first-contact query performance
+  @@index([mailBoxId, fromAddr])
 }
 
 model EmailFlag {

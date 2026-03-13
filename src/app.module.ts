@@ -3,9 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
-import { FoldersModule } from './folders/folders.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailerModule } from '@nestjs-modules/mailer';
@@ -26,6 +24,8 @@ import { join } from 'path';
 import { AiAgentModule } from './ai-agent/ai-agent.module';
 import { MalwareModule } from './malware/malware.module';
 import { ProtoModule } from './proto/proto.module';
+import { SecurityModule } from './security/security.module';
+import { SecurityTestModule } from './security/security-test.module';
 
 @Module({
   imports: [
@@ -50,9 +50,7 @@ import { ProtoModule } from './proto/proto.module';
     EncryptionModule,
     AuthModule,
     UserModule,
-    FoldersModule,
     NotificationsModule,
-    HealthModule,
     PrismaModule,
     MailerModule,
     NodeMailerModule,
@@ -69,6 +67,8 @@ import { ProtoModule } from './proto/proto.module';
     AiAgentModule,
     MalwareModule,
     ProtoModule,
+    SecurityModule,
+    SecurityTestModule
   ],
   controllers: [AppController],
   providers: [

@@ -38,11 +38,11 @@ export class EmailSendProcessor extends WorkerHost {
     let attachments: Array<{ filename: string; content: Buffer; contentType: string }> = [];
 
     try {
-      if (data.attachmentPaths?.length) {
+      if (data.attachments?.length) {
         attachments = await Promise.all(
-          data.attachmentPaths.map(async (a) => ({
+          data.attachments.map(async (a) => ({
             filename: a.filename,
-            content: await this.attachmentStorage.readAttachment(a.path),
+            content: await this.attachmentStorage.readAttachment(a.url),
             contentType: a.mimeType,
           })),
         );
@@ -117,8 +117,8 @@ export class EmailSendProcessor extends WorkerHost {
 
       await this.saveSentEmail(mailbox.id, data, from);
     } finally {
-      if (data.attachmentPaths?.length) {
-        await this.attachmentStorage.cleanupPaths(data.attachmentPaths);
+      if (data.attachments?.length) {
+        await this.attachmentStorage.cleanupPaths(data.attachments);
       }
     }
   }

@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package urlintelservice;
+
+service UrlIntelService {
+  rpc AnalyzeUrls (UrlIntelRequest) returns (UrlIntelResponse);
+}
+
+message UrlIntelRequest {
+  repeated string urls = 1;
+}
+
+message UrlResult {
+  string url     = 1;
+  string verdict = 2;   // clean | suspicious | malicious
+  int32  score   = 3;
+  string reason  = 4;
+}
+
+message UrlIntelResponse {
+  repeated UrlResult results = 1;
+}
