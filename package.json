@@ -73,7 +73,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
-    "ua-parser-js": "^2.0.9"
+    "ua-parser-js": "^2.0.9",
+    "whois-json": "^2.0.4"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -128,6 +129,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
-    "setupFilesAfterEnv": ["<rootDir>/../jest.setup.ts"]
+    "setupFilesAfterEnv": [
+      "<rootDir>/../jest.setup.ts"
+    ]
   }
 }

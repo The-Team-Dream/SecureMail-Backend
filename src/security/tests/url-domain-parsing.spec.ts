@@ -11,7 +11,7 @@ import {
   parseUrlDomain,
   detectPunycodeSpoof,
   detectSubdomainImpersonation,
-} from '../pipeline/url-analysis/url-analysis.service';
+} from '../pipeline/5-url-analysis/url-analysis.service';
 
 describe('PART 1 — Robust Domain Parsing (tldts-compatible)', () => {
 

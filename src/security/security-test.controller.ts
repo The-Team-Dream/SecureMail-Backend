@@ -45,8 +45,7 @@ import {
 } from '@nestjs/common';
 import { SecurityService, SecurityPipelineInput } from './security.service';
 import { IntelligenceCacheService } from './intelligence/intelligence-cache.service';
-import { OpenPhishCacheJob } from './intelligence/openphish-cache.job';
-import { IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -86,12 +85,17 @@ class AnalyzeEmailDto {
   @IsOptional()
   @IsNumber()
   userId?: number;
+
+  @IsOptional()
+  @IsArray()
+  attachments?: Array<{
+    filename: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  }>;
 }
 
-class IntelHashDto {
-  @IsOptional()
-  @IsString() sha256!: string;
-}
 class IntelUrlDto {
   @IsOptional()
   @IsString() url!: string;
@@ -107,7 +111,7 @@ class IntelDomainDto {
 class CacheInvalidateDto {
   @IsOptional()
   @IsString()
-  type!: 'hash' | 'url' | 'ip' | 'domain';
+  type!: 'url' | 'ip' | 'domain';
   @IsOptional()
   @IsString()
   value!: string;
@@ -232,7 +236,6 @@ export class SecurityTestController {
   constructor(
     private readonly securityService: SecurityService,
     private readonly intel: IntelligenceCacheService,
-    @Optional() private readonly openPhish: OpenPhishCacheJob | null,
   ) { }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -309,14 +312,12 @@ export class SecurityTestController {
    */
   @Get('cache/stats')
   async getCacheStats() {
-    const [intelStats, openPhishStats] = await Promise.all([
+    const [intelStats] = await Promise.all([
       this.intel.getCacheStats(),
-      this.openPhish?.getStats() ?? { count: 0, lastFetchAt: null, redisAvailable: false },
     ]);
     return {
       timestamp: new Date().toISOString(),
       intel: intelStats,
-      openPhish: openPhishStats,
     };
   }
 
@@ -331,21 +332,6 @@ export class SecurityTestController {
     return { success: true, invalidated: `${dto.type}:${dto.value}` };
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // INDIVIDUAL INTEL LOOKUPS
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /**
-   * POST /security-test/intel/hash
-   * Test file hash reputation lookup.
-   */
-  @Post('intel/hash')
-  @HttpCode(HttpStatus.OK)
-  async lookupHash(@Body() dto: IntelHashDto) {
-    const start = Date.now();
-    const result = await this.intel.lookupFileHash(dto.sha256);
-    return { ...result, lookupMs: Date.now() - start };
-  }
 
   /**
    * POST /security-test/intel/url
@@ -401,6 +387,8 @@ export class SecurityTestController {
     return {
       scenario: scenario ?? 'custom',
       timestamp: new Date().toISOString(),
+      // ── Performance ───────────────────────────────────────────────────────
+      processingMs: result.processingMs,
 
       // ── Summary ──────────────────────────────────────────────────────────
       verdict: {
@@ -413,8 +401,17 @@ export class SecurityTestController {
         recommendations: result.verdict.recommendations,
       },
 
-      // ── Performance ───────────────────────────────────────────────────────
-      processingMs: result.processingMs,
+      riskAssessment: result.riskAssessment,
+
+      // ── Authentication ────────────────────────────────────────────────────
+      authentication: result.authSummary,
+
+      // ── Triggered rules ───────────────────────────────────────────────────
+      triggeredRules: result.ruleHits.map((r: any) => ({
+        rule: r.rule,
+        score: r.score,
+        description: r.description,
+      })),
 
       // ── Email parsed signals ──────────────────────────────────────────────
       parsedEmail: {
@@ -425,28 +422,6 @@ export class SecurityTestController {
         hasAttachment: result.parsedEmail.hasAttachment,
         isReplyThread: result.parsedEmail.isReplyThread,
       },
-
-      // ── Authentication ────────────────────────────────────────────────────
-      authentication: result.authSummary,
-      scoreBreakdown: result.riskAssessment?.breakdown ? {
-        ruleScore: result.riskAssessment.breakdown.ruleScore,
-        reputationScore: result.riskAssessment.breakdown.reputationScore,
-        behaviorScore: result.riskAssessment.breakdown.behaviorScore,
-        correlationBonus: result.riskAssessment.breakdown.correlationBonus,
-        urlThreatScore: result.riskAssessment.breakdown.urlThreatScore,
-        malwareScore: result.riskAssessment.breakdown.malwareScore,
-        urlDomainAmplifier: result.riskAssessment.breakdown.urlDomainAmplifier,
-        becReplyToBonus: result.riskAssessment.breakdown.becReplyToBonus,
-        rawTotal: result.riskAssessment.breakdown.rawTotal,
-        finalScore: result.riskAssessment.breakdown.finalScore,
-      } : null,
-      // ── Triggered rules ───────────────────────────────────────────────────
-      triggeredRules: result.ruleHits.map((r: any) => ({
-        rule: r.rule,
-        score: r.score,
-        description: r.description,
-      })),
-
       // ── AI report (if available) ──────────────────────────────────────────
       aiReport: result.aiReport ? {
         verdict: result.aiReport.verdict,

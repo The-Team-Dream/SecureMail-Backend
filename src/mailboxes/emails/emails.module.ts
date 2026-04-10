@@ -10,14 +10,12 @@ import { OutlookSendProvider } from './providers/outlook-send.provider';
 import { SmtpSendProvider } from './providers/smtp-send.provider';
 import { PrismaModule } from '../../prisma.module';
 import { AuthModule } from '../../auth/auth.module';
-import { ClassificationModule } from '../../classification/classification.module';
 import { MailboxesModule } from '../mailboxes.module';
 
 @Module({
   imports: [
     PrismaModule,
     AuthModule,
-    ClassificationModule,
     MailboxesModule,
     BullModule.registerQueue({
       name: EMAIL_SEND_QUEUE,

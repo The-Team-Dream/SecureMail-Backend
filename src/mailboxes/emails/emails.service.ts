@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
-import { ClassificationService } from '../../classification/classification.service';
 import { FolderType } from 'generated/prisma/enums';
 import { ReportType } from './dto/report-email.dto';
 import { TargetFolderType } from './dto/reclassify-email.dto';
@@ -13,7 +12,6 @@ import { TargetFolderType } from './dto/reclassify-email.dto';
 export class EmailsService {
   constructor(
     private prisma: PrismaService,
-    private classificationService: ClassificationService,
   ) {}
 
   async ensureMailboxAccess(userId: number, mailboxId: number) {
@@ -253,24 +251,5 @@ export class EmailsService {
       });
     }
     return folder;
-  }
-
-  /**
-   * Classify an email and return the result. Used during sync.
-   */
-  classifyEmail(email: {
-    subject: string;
-    fromAddr: string;
-    fromName?: string | null;
-    bodyText?: string | null;
-    bodyHtml?: string | null;
-  }) {
-    return this.classificationService.classify({
-      subject: email.subject,
-      fromAddr: email.fromAddr,
-      fromName: email.fromName ?? undefined,
-      bodyText: email.bodyText,
-      bodyHtml: email.bodyHtml,
-    });
   }
 }

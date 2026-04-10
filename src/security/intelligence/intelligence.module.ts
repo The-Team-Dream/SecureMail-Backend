@@ -22,7 +22,6 @@ import { Module }         from '@nestjs/common';
 import { ConfigModule, ConfigService }  from '@nestjs/config';
 import { IntelligenceCacheService } from './intelligence-cache.service';
 import { ThreatFeedsService }       from './threat-feeds.service';
-import { OpenPhishCacheJob }        from './openphish-cache.job';
 
 @Module({
   imports: [ConfigModule],
@@ -59,8 +58,7 @@ import { OpenPhishCacheJob }        from './openphish-cache.job';
     },
     IntelligenceCacheService,
     ThreatFeedsService,
-    OpenPhishCacheJob,
   ],
-  exports: [IntelligenceCacheService, ThreatFeedsService, OpenPhishCacheJob],
+  exports: [IntelligenceCacheService, ThreatFeedsService],
 })
 export class IntelligenceModule {}

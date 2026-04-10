@@ -1,73 +1,38 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// security.service.ts  —  Security Pipeline Orchestrator
-//
-// This is the Brain Orchestrator for the entire security pipeline.
-// It coordinates all 11 stages in the correct order:
-//
-//   1.  Email Parsing Engine
-//   2.  Authentication Engine
-//   3.  Reputation Engine
-//   4.  Detection Rule Engine (delegates to ClassificationService)
-//   5.  Rule Graph Amplification
-//   6.  URL Analysis Engine
-//   7.  Behavioral Analysis Engine
-//   8.  Malware Analysis (existing MalwareService — reused)
-//   9.  AI Security Agent (existing AiAgentService — reused)
-//  10.  Correlation Engine
-//  11.  Risk Scoring Engine
-//  12.  Decision Engine
-//  13.  Post-Delivery Protection (async, non-blocking)
-//
-// The existing email-sync.processor.ts classifyAndMove() remains INTACT.
-// This service provides an ENHANCED pipeline for full-context analysis.
-// New emails go through this service; the old path is preserved as fallback.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService }         from '../prisma.service';
-import { MalwareService }        from '../malware/malware.service';
-import { AiAgentService }        from '../ai-agent/ai-agent.service';
-import { NotificationsService }  from '../notifications/notifications.service';
+import { PrismaService } from '../prisma.service';
+import { MalwareService } from './pipeline/6-malware/malware.service';
+import { AiAgentService } from './pipeline/10-ai-agent/ai-agent.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, FolderType } from 'generated/prisma/enums';
 
-import { EmailParserService, RawEmailInput, ParsedEmail } from './pipeline/email-parser/email-parser.service';
-import { AuthenticationService }   from './pipeline/authentication/authentication.service';
-import { ReputationService }       from './pipeline/reputation/reputation.service';
-import { RuleEngineService }       from './pipeline/detection/rule-engine/rule-engine.service';
-import { RuleGraphService }        from './pipeline/detection/rule-graph/rule-graph.service';
-import { CorrelationService }      from './pipeline/detection/correlation-engine/correlation.service';
-import { RuleRegistry }            from './pipeline/detection/rules/rule-registry.service';
-import { UrlAnalysisService }      from './pipeline/url-analysis/url-analysis.service';
-import { BehaviorService }         from './pipeline/behavior/behavior.service';
-import { ScoringService }          from './pipeline/scoring/scoring.service';
-import { DecisionService, FinalVerdict } from './pipeline/decision/decision.service';
-import {
-  DetectionContext,
-  UNKNOWN_REPUTATION,
-  DEFAULT_BEHAVIOR,
-  MalwareSignals,
-} from './pipeline/detection/rule-engine/detection-context';
+import { AuthenticationService } from './pipeline/2-authentication/authentication.service';
+import { ReputationService } from './pipeline/3-reputation/reputation.service';
+import { RuleEngineService } from './pipeline/7-detection/rule-engine/rule-engine.service';
+import { RuleGraphService } from './pipeline/7-detection/rule-graph/rule-graph.service';
+import { CorrelationService } from './pipeline/7-detection/correlation-engine/correlation.service';
+import { RuleRegistry } from './pipeline/7-detection/rules/rule-registry.service';
+import { UrlAnalysisService } from './pipeline/5-url-analysis/url-analysis.service';
+import { BehaviorService } from './pipeline/4-behavior/behavior.service';
+import { ScoringService } from './pipeline/8-scoring/scoring.service';
+import { DecisionService } from './pipeline/9-decision/decision.service';
+import { DetectionContext, } from './pipeline/7-detection/rule-engine/detection-context';
+import { AiSignals, FinalVerdict, MalwareSignals, ParsedEmail, RawEmailInput } from 'src/security/types';
+import { EmailParserService } from './pipeline/1-email-parser/email-parser.service';
+import { DEFAULT_BEHAVIOR, UNKNOWN_REPUTATION } from 'src/security/constants';
 
-// ─── Pipeline input ───────────────────────────────────────────────────────────
-export interface SecurityPipelineInput extends RawEmailInput {
-  // Attachments with storage paths (already persisted by email-sync processor)
-  attachments?: Array<{
-    filename:    string;
-    mimeType:    string;
-    size:        number;
-    storagePath: string;
-  }>;
-}
+//Pipeline input 
+export interface SecurityPipelineInput extends RawEmailInput { }
 
-// ─── Pipeline output ──────────────────────────────────────────────────────────
+//Pipeline output 
 export interface SecurityPipelineResult {
-  verdict:        FinalVerdict;
-  parsedEmail:    ParsedEmail;
-  authSummary:    string;
-  riskAssessment?: object;
-  ruleHits:       Array<{ rule: string; score: number; description: string }>;
-  aiReport:       Record<string, unknown> | null;
-  processingMs:   number;
+  parsedEmail: ParsedEmail;
+  verdict: FinalVerdict;
+  riskAssessment: object;
+  authSummary: string;
+  ruleHits: Array<{ rule: string; score: number; description: string }>;
+  aiReport: Record<string, unknown> | null;
+  processingMs: number;
+  malwareScan: MalwareSignals;
 }
 
 @Injectable()
@@ -75,31 +40,23 @@ export class SecurityService {
   private readonly logger = new Logger(SecurityService.name);
 
   constructor(
-    private readonly prisma:          PrismaService,
-    private readonly malwareService:  MalwareService,
-    private readonly aiAgentService:  AiAgentService,
-    private readonly notifications:   NotificationsService,
+    private readonly prisma: PrismaService,
+    private readonly malwareService: MalwareService,
+    private readonly aiAgentService: AiAgentService,
+    private readonly notifications: NotificationsService,
+    private readonly emailParser: EmailParserService,
+    private readonly authentication: AuthenticationService,
+    private readonly reputation: ReputationService,
+    private readonly ruleEngine: RuleEngineService,
+    private readonly ruleRegistry: RuleRegistry,
+    private readonly ruleGraph: RuleGraphService,
+    private readonly correlation: CorrelationService,
+    private readonly urlAnalysis: UrlAnalysisService,
+    private readonly behavior: BehaviorService,
+    private readonly scoring: ScoringService,
+    private readonly decision: DecisionService,
+  ) { }
 
-    // Pipeline stages
-    private readonly emailParser:     EmailParserService,
-    private readonly authentication:  AuthenticationService,
-    private readonly reputation:      ReputationService,
-    private readonly ruleEngine:      RuleEngineService,
-    private readonly ruleRegistry:    RuleRegistry,
-    private readonly ruleGraph:       RuleGraphService,
-    private readonly correlation:     CorrelationService,
-    private readonly urlAnalysis:     UrlAnalysisService,
-    private readonly behavior:        BehaviorService,
-    private readonly scoring:         ScoringService,
-    private readonly decision:        DecisionService,
-  ) {}
-
-  /**
-   * analyze() — run the full security pipeline for an email.
-   *
-   * Designed to be called from email-sync.processor.ts as a drop-in
-   * replacement for the existing classifyAndMove() method.
-   */
   async analyze(
     input: SecurityPipelineInput,
     userId: number,
@@ -111,8 +68,8 @@ export class SecurityService {
     } catch (err) {
       this.logger.error('SecurityPipeline.analyze failed', {
         emailId: input.emailId,
-        error:   err instanceof Error ? err.message : String(err),
-        stack:   err instanceof Error ? err.stack : undefined,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
       });
 
       // Fallback: return safe defaults so email processing continues
@@ -120,183 +77,219 @@ export class SecurityService {
     }
   }
 
-  // ─── Main pipeline ─────────────────────────────────────────────────────────
+  //Main pipeline 
   private async runPipeline(
-    input:   SecurityPipelineInput,
-    userId:  number,
+    input: SecurityPipelineInput,
+    userId: number,
     startMs: number,
   ): Promise<SecurityPipelineResult> {
 
-    // ── Stage 1: Email Parsing ────────────────────────────────────────────────
+    //Stage 1: Email Parsing 
     const parsedEmail = this.emailParser.parse(input);
-
-    // ── Stage 2: Authentication Analysis ─────────────────────────────────────
-    const authResult = this.authentication.analyze(parsedEmail);
-
-    // ── Stage 3: Reputation Check (non-blocking) ──────────────────────────────
-    // Run in parallel with behavioral analysis
-    const [reputationSignals, behaviorSignals] = await Promise.all([
+    //Stages: 2,3,4,5,6 in parallel with each other
+    const malwarePromise = this.runMalwareAnalysis(input);
+    const [authSignals, reputationSignals, behaviorSignals, urlAnalysisSignals, malwareSignals] = await Promise.all([
+      this.authentication.analyze(parsedEmail),
       this.reputation.check(parsedEmail).catch(() => UNKNOWN_REPUTATION),
       this.behavior.analyze(parsedEmail).catch(() => DEFAULT_BEHAVIOR),
-    ]);
-
-    // ── Stage 4: Malware Analysis (parallel with URL analysis) ───────────────
-    const [malwareSignals, urlAnalysisResult] = await Promise.all([
-      this.runMalwareAnalysis(input),
       this.urlAnalysis.analyze(parsedEmail).catch(() => null),
+      Promise.race([
+        malwarePromise,
+        new Promise<null>(r => setTimeout(() => r(null), 5000)),
+      ]),
     ]);
-
-    // ── Stage 5: Build Detection Context ─────────────────────────────────────
+    //Stage 7: Build Detection Context and pass it to rule engine
     const ctx = new DetectionContext(
       parsedEmail,
-      authResult,
+      authSignals,
       reputationSignals,
       behaviorSignals,
+      urlAnalysisSignals,
       malwareSignals,
     );
+    await this.ruleEngine.runRuleEngine(ctx);
 
-    // ── Stage 6: Rule Engine (ClassificationService + context rules) ──────────
-    await this.ruleEngine.runAll(ctx);
+    //Stage 8: Apply graph amplification 
+    await this.ruleGraph.applyGraphAmplification(ctx);
 
-    // ── Stage 7: Rule Graph Amplification ─────────────────────────────────────
-    this.ruleGraph.applyGraphAmplification(ctx);
+    //Stage 9: Correlation — returns result, stored in ctx
+    ctx.setCorrelation(await this.correlation.correlate(ctx));
 
-    // ── Stage 8: Correlation Engine ───────────────────────────────────────────
-    const correlationResult = this.correlation.correlate(ctx);
-    ctx.correlation = correlationResult;
+    //Stage 10: Compute risk assessment — stored in ctx
+    ctx.setRiskAssessment(this.scoring.computeRisk(ctx));
+    if (!ctx.riskAssessment) {
+      this.logger.error('Scoring failed — aborting pipeline');
+      return this.buildFallbackResult(input, startMs);
+    }
 
-    // ── Stage 9: Risk Scoring ─────────────────────────────────────────────────
-    const riskAssessment = this.scoring.computeRisk(ctx, urlAnalysisResult ?? undefined);
+    //Stage 11: Decision — stored in ctx
+    ctx.setVerdict(this.decision.decide(ctx.riskAssessment!, ctx));
+    if (!ctx.verdict) {
+      this.logger.error('Decision failed — aborting pipeline');
+      return this.buildFallbackResult(input, startMs);
+    }
 
-    // ── Stage 10: AI Security Agent ───────────────────────────────────────────
-    const aiReport = await this.runAiAgent(parsedEmail, ctx, riskAssessment);
+    //Stage 12: AI Agent — returns AiSignals, stored in ctx
+    ctx.setAiReport(await this.runAiAgent(ctx));
 
-    // ── Stage 11: Decision Engine ─────────────────────────────────────────────
-    const verdict = this.decision.decide(riskAssessment, ctx, correlationResult);
+    //Stage 13: Persist results — reads everything from ctx
+    await this.persistResults(input, ctx);
 
-    // ── Stage 12: Persist results to DB ──────────────────────────────────────
-    await this.persistResults(input, riskAssessment, malwareSignals, aiReport, verdict);
+    //Stage 14: Notifications — reads everything from ctx
+    await this.sendNotifications(input, userId, ctx);
 
-    // ── Stage 13: Notifications ───────────────────────────────────────────────
-    await this.sendNotifications(input, userId, verdict, riskAssessment, malwareSignals);
+    // If malware scanning in porgress, run it in background
+    if (!malwareSignals) {
+      malwarePromise.then(async (result) => {
+        if (!result || result.verdict !== 'malicious') return;
+        const emailId = Number(input.emailId);
+        const mailBoxId = Number(input.mailBoxId);
+        //1. Update malware fields 
+        const folder = await this.getOrCreateFolder(mailBoxId, FolderType.MALWARE);
+        await this.prisma.email.update({
+          where: { id: emailId },
+          data: {
+            malwareScore: result.score,
+            malwareVerdict: result.verdict,
+            malwareSeverity: result.severity,
+            isPhishing: false,
+            isSpam: false,
+            folderId: folder.id,
+          },
+        });
+        //2. Notify user 
+        await this.notify(
+          userId, mailBoxId, emailId,
+          NotificationType.MALWARE_DETECTED,
+          'Malware Detected',
+          `Malicious attachment detected in: ${input.subject}`,
+          { emailId, malwareScore: result.score, malwareVerdict: result.verdict },
+        );
+
+        this.logger.warn('Post-delivery malware detected', {
+          emailId, score: result.score, verdict: result.verdict,
+        });
+      })
+        .catch(() => null);
+    }
 
     const processingMs = Date.now() - startMs;
 
     this.logger.log('Security pipeline complete', {
-      emailId:       input.emailId,
-      verdict:       verdict.label,
-      score:         riskAssessment.finalScore,
+      emailId: input.emailId,
+      verdict: ctx.verdict!.label,
+      score: ctx.riskAssessment!.finalScore,
       processingMs,
-      patterns:      correlationResult.patterns,
+      patterns: ctx.correlation.patterns,
       triggeredRules: ctx.getTriggeredRuleIds().length,
     });
 
     return {
-      verdict,
-      parsedEmail,
-      authSummary: authResult.summary,
-      riskAssessment,
-      ruleHits:    ctx.getTriggeredRules().map(r => ({
-        rule:        r.ruleId,
-        score:       r.score,
+      parsedEmail: ctx.parsedEmail,
+      riskAssessment: ctx.riskAssessment,
+      verdict: ctx.verdict!,
+      authSummary: ctx.authResult.summary,
+      ruleHits: ctx.getTriggeredRules().map(r => ({
+        rule: r.ruleId,
+        score: r.originalScore + r.amplifiedScore,
         description: r.explanation,
       })),
-      aiReport:      aiReport as Record<string, unknown> | null,
+      aiReport: ctx.ai as Record<string, unknown> | null,
       processingMs,
+      malwareScan: ctx.malware
+        ? { status: 'completed', message: 'Malware scan completed', verdict: ctx.malware.verdict, score: ctx.malware.score, severity: ctx.malware.severity }
+        : input.attachments?.length
+          ? { status: 'pending', message: 'Malware scan in progress — you will be notified if a threat is found' }
+          : { status: 'not_applicable', message: 'No attachments' },
     };
   }
 
-  // ─── Malware analysis (reuses existing MalwareService) ───────────────────
+  //Malware analysis (reuses existing MalwareService) 
   private async runMalwareAnalysis(input: SecurityPipelineInput): Promise<MalwareSignals | null> {
     if (!input.attachments || input.attachments.length === 0) return null;
-
-    let worstScore    = 0;
-    let worstVerdict  = 'clean';
+    let worstScore = 0;
+    let worstVerdict = 'clean';
     let worstSeverity = 'Low';
-
     for (const att of input.attachments) {
       const result = await this.malwareService.analyzeFile({
         storagePath: att.storagePath,
-        filename:    att.filename ?? 'unknown',
-        mimeType:    att.mimeType,
+        filename: att.filename ?? 'unknown',
+        mimeType: att.mimeType,
       }).catch(() => null);
-
       if (result && result.score > worstScore) {
-        worstScore    = result.score;
-        worstVerdict  = result.verdict;
+        worstScore = result.score;
+        worstVerdict = result.verdict;
         worstSeverity = result.severity;
       }
     }
-
     return { verdict: worstVerdict, score: worstScore, severity: worstSeverity };
   }
 
-  // ─── AI Agent (reuses existing AiAgentService) ────────────────────────────
-  private async runAiAgent(
-    parsedEmail:     ParsedEmail,
-    ctx:             DetectionContext,
-    riskAssessment:  { spamScore: number; phishingScore: number; isSpam: boolean; isPhishing: boolean },
-  ): Promise<unknown> {
+  //AI Agent — reads everything from ctx, returns AiSignals
+  private async runAiAgent(ctx: DetectionContext): Promise<AiSignals> {
     try {
-      return await this.aiAgentService.generateReport({
-        emailId:     parsedEmail.emailId,
-        subject:     parsedEmail.subject,
-        fromAddr:    parsedEmail.fromAddr,
-        fromName:    parsedEmail.fromName ?? '',
-        bodyText:    parsedEmail.bodyPlain,
+      const risk = ctx.riskAssessment!;
+      const email = ctx.parsedEmail;
+      const result = await this.aiAgentService.generateReport({
+        emailId: email.emailId,
+        subject: email.subject,
+        fromAddr: email.fromAddr,
+        fromName: email.fromName ?? '',
+        bodyText: email.bodyPlain,
 
-        spamScore:     riskAssessment.spamScore,
-        phishingScore: riskAssessment.phishingScore,
-        isSpam:        riskAssessment.isSpam,
-        isPhishing:    riskAssessment.isPhishing,
+        spamScore: risk.spamScore,
+        phishingScore: risk.phishingScore,
+        isSpam: risk.isSpam,
+        isPhishing: risk.isPhishing,
 
         ruleHits: ctx.getTriggeredRules().map(r => ({
-          rule:        r.ruleId,
-          score:       r.score,
+          originalScore: r.originalScore,
+          amplifiedScore: r.amplifiedScore,
           description: r.explanation,
         })),
 
-        hasAttachment:   parsedEmail.hasAttachment,
-        malwareVerdict:  ctx.malware?.verdict  ?? '',
-        malwareScore:    ctx.malware?.score    ?? 0,
+        hasAttachment: email.hasAttachment,
+        malwareVerdict: ctx.malware?.verdict ?? '',
+        malwareScore: ctx.malware?.score ?? 0,
         malwareSeverity: ctx.malware?.severity ?? '',
 
-        mailboxId:           parsedEmail.mailBoxId,
-        previousEmailCount:  ctx.behavior.previousEmailCount,
-        senderTypicalTopic:  ctx.behavior.typicalTopic,
+        mailboxId: email.mailBoxId,
+        previousEmailCount: ctx.behavior.previousEmailCount,
+        senderTypicalTopic: ctx.behavior.typicalTopic,
       });
+      return (result ?? {}) as AiSignals;
     } catch {
-      return null; // AI agent is non-fatal
+      return {}; // AI agent is non-fatal
     }
   }
 
-  // ─── Persist results ──────────────────────────────────────────────────────
+  //Persist results — reads everything from ctx
   private async persistResults(
-    input:          SecurityPipelineInput,
-    risk:           { spamScore: number; phishingScore: number; isSpam: boolean; isPhishing: boolean; isMalware: boolean; finalScore: number },
-    malware:        MalwareSignals | null,
-    aiReport:       unknown,
-    verdict:        FinalVerdict,
+    input: SecurityPipelineInput,
+    ctx: DetectionContext,
   ): Promise<void> {
     const emailId = Number(input.emailId);
     if (!emailId || isNaN(emailId)) return;
 
+    const risk = ctx.riskAssessment!;
+    const malware = ctx.malware;
+
     const updateData: Record<string, unknown> = {
-      spamScore:      risk.spamScore,
-      phishingScore:  risk.phishingScore,
-      isSpam:         risk.isSpam && !risk.isPhishing && !risk.isMalware,
-      isPhishing:     risk.isPhishing && !risk.isMalware,
-      malwareScore:   malware?.score    ?? null,
-      malwareVerdict: malware?.verdict  ?? null,
+      spamScore: risk.spamScore,
+      phishingScore: risk.phishingScore,
+      isSpam: risk.isSpam && !risk.isPhishing && !risk.isMalware,
+      isPhishing: risk.isPhishing && !risk.isMalware,
+      malwareScore: malware?.score ?? null,
+      malwareVerdict: malware?.verdict ?? null,
       malwareSeverity: malware?.severity ?? null,
-      aiReport:       aiReport ?? null,
+      aiReport: Object.keys(ctx.ai).length ? ctx.ai : null,
     };
 
     // Move to appropriate folder
     let targetFolderType: FolderType | null = null;
-    if (risk.isMalware)         targetFolderType = FolderType.MALWARE;
-    else if (risk.isPhishing)   targetFolderType = FolderType.PHISHING;
-    else if (risk.isSpam)       targetFolderType = FolderType.SPAM;
+    if (risk.isMalware) targetFolderType = FolderType.MALWARE;
+    else if (risk.isPhishing) targetFolderType = FolderType.PHISHING;
+    else if (risk.isSpam) targetFolderType = FolderType.SPAM;
 
     if (targetFolderType) {
       const folder = await this.getOrCreateFolder(Number(input.mailBoxId), targetFolderType);
@@ -305,21 +298,22 @@ export class SecurityService {
 
     await this.prisma.email.update({
       where: { id: emailId },
-      data:  updateData,
+      data: updateData,
     }).catch(err => this.logger.warn('Email update failed', { emailId, error: String(err) }));
   }
 
-  // ─── Notifications ────────────────────────────────────────────────────────
+  //Notifications — reads everything from ctx
   private async sendNotifications(
-    input:   SecurityPipelineInput,
-    userId:  number,
-    verdict: FinalVerdict,
-    risk:    { isMalware: boolean; isPhishing: boolean; finalScore: number },
-    malware: MalwareSignals | null,
+    input: SecurityPipelineInput,
+    userId: number,
+    ctx: DetectionContext,
   ): Promise<void> {
-    const emailId   = Number(input.emailId);
+    const emailId = Number(input.emailId);
     const mailBoxId = Number(input.mailBoxId);
-    const subject   = input.subject || '(No subject)';
+    const subject = input.subject || '(No subject)';
+    const risk = ctx.riskAssessment!;
+    const verdict = ctx.verdict!;
+    const malware = ctx.malware;
 
     if (risk.isMalware) {
       await this.notify(userId, mailBoxId, emailId, NotificationType.MALWARE_DETECTED,
@@ -349,7 +343,7 @@ export class SecurityService {
     } catch { /* non-fatal */ }
   }
 
-  // ─── Folder helper ────────────────────────────────────────────────────────
+  //Folder helper 
   private async getOrCreateFolder(mailBoxId: number, type: FolderType) {
     let folder = await this.prisma.folder.findFirst({ where: { mailBoxId, type } });
     if (!folder) {
@@ -360,28 +354,30 @@ export class SecurityService {
     return folder;
   }
 
-  // ─── Fallback result ──────────────────────────────────────────────────────
+  //Fallback result 
   private buildFallbackResult(
-    input:   SecurityPipelineInput,
+    input: SecurityPipelineInput,
     startMs: number,
   ): SecurityPipelineResult {
     return {
       verdict: {
-        label:           'SAFE',
-        riskScore:       0,
-        confidence:      0,
-        action:          'allow',
-        explanation:     'Security pipeline error — email delivered with no analysis.',
-        details:         [],
-        triggeredRules:  [],
-        attackPatterns:  [],
+        label: 'SAFE',
+        riskScore: 0,
+        confidence: 0,
+        action: 'allow',
+        explanation: 'Security pipeline error — email delivered with no analysis.',
+        details: [],
+        triggeredRules: [],
+        attackPatterns: [],
         recommendations: [],
       },
-      parsedEmail:  this.emailParser.parse(input),
-      authSummary:  'unknown',
-      ruleHits:     [],
-      aiReport:     null,
+      riskAssessment: [],
+      parsedEmail: this.emailParser.parse(input),
+      authSummary: 'unknown',
+      ruleHits: [],
+      aiReport: null,
       processingMs: Date.now() - startMs,
+      malwareScan: { message: "There is error during scanning, please be aware from download any attachment" }
     };
   }
 }
