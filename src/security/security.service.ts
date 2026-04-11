@@ -2,6 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { MalwareService } from './pipeline/6-malware/malware.service';
 import { AiAgentService } from './pipeline/10-ai-agent/ai-agent.service';
+import {
+    analysisReportToAiSignals,
+    attachOkIntegrationMeta,
+    failedIntegrationPayload,
+} from './pipeline/10-ai-agent/ai-agent.mapping';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, FolderType } from 'generated/prisma/enums';
 
@@ -194,7 +199,7 @@ export class SecurityService {
         score: r.originalScore + r.amplifiedScore,
         description: r.explanation,
       })),
-      aiReport: ctx.ai as Record<string, unknown> | null,
+      aiReport: this.buildAiReportSnapshot(ctx),
       processingMs,
       malwareScan: ctx.malware
         ? { status: 'completed', message: 'Malware scan completed', verdict: ctx.malware.verdict, score: ctx.malware.score, severity: ctx.malware.severity }
@@ -202,6 +207,16 @@ export class SecurityService {
           ? { status: 'pending', message: 'Malware scan in progress — you will be notified if a threat is found' }
           : { status: 'not_applicable', message: 'No attachments' },
     };
+  }
+
+  private buildAiReportSnapshot(ctx: DetectionContext): Record<string, unknown> | null {
+    if (ctx.aiIntegration.state === 'ok' && Object.keys(ctx.ai).length > 0) {
+      return attachOkIntegrationMeta(ctx.ai, ctx.aiIntegration) as Record<string, unknown>;
+    }
+    if (ctx.aiIntegration.state === 'failed') {
+      return failedIntegrationPayload(ctx.aiIntegration) as Record<string, unknown>;
+    }
+    return null;
   }
 
   //Malware analysis (reuses existing MalwareService) 
@@ -227,40 +242,49 @@ export class SecurityService {
 
   //AI Agent — reads everything from ctx, returns AiSignals
   private async runAiAgent(ctx: DetectionContext): Promise<AiSignals> {
-    try {
-      const risk = ctx.riskAssessment!;
-      const email = ctx.parsedEmail;
-      const result = await this.aiAgentService.generateReport({
-        emailId: email.emailId,
-        subject: email.subject,
-        fromAddr: email.fromAddr,
-        fromName: email.fromName ?? '',
-        bodyText: email.bodyPlain,
+    const risk = ctx.riskAssessment!;
+    const email = ctx.parsedEmail;
+    const outcome = await this.aiAgentService.generateReport({
+      emailId: email.emailId,
+      subject: email.subject,
+      fromAddr: email.fromAddr,
+      fromName: email.fromName ?? '',
+      bodyText: email.bodyPlain,
 
-        spamScore: risk.spamScore,
-        phishingScore: risk.phishingScore,
-        isSpam: risk.isSpam,
-        isPhishing: risk.isPhishing,
+      spamScore: risk.spamScore,
+      phishingScore: risk.phishingScore,
+      isSpam: risk.isSpam,
+      isPhishing: risk.isPhishing,
 
-        ruleHits: ctx.getTriggeredRules().map(r => ({
-          originalScore: r.originalScore,
-          amplifiedScore: r.amplifiedScore,
-          description: r.explanation,
-        })),
+      ruleHits: ctx.getTriggeredRules().map(r => ({
+        rule: r.ruleId,
+        score: r.originalScore + r.amplifiedScore,
+        description: r.explanation,
+      })),
 
-        hasAttachment: email.hasAttachment,
-        malwareVerdict: ctx.malware?.verdict ?? '',
-        malwareScore: ctx.malware?.score ?? 0,
-        malwareSeverity: ctx.malware?.severity ?? '',
+      hasAttachment: email.hasAttachment,
+      malwareVerdict: ctx.malware?.verdict ?? '',
+      malwareScore: ctx.malware?.score ?? 0,
+      malwareSeverity: ctx.malware?.severity ?? '',
 
-        mailboxId: email.mailBoxId,
-        previousEmailCount: ctx.behavior.previousEmailCount,
-        senderTypicalTopic: ctx.behavior.typicalTopic,
-      });
-      return (result ?? {}) as AiSignals;
-    } catch {
-      return {}; // AI agent is non-fatal
+      mailboxId: email.mailBoxId,
+      previousEmailCount: ctx.behavior.previousEmailCount,
+      senderTypicalTopic: ctx.behavior.typicalTopic,
+    });
+
+    const atMs = Date.now();
+    if (outcome.ok) {
+      ctx.setAiIntegration({ state: 'ok', atMs });
+      return analysisReportToAiSignals(outcome.report);
     }
+    ctx.setAiIntegration({
+      state: 'failed',
+      atMs,
+      grpcCode: outcome.error.grpcCode,
+      message: outcome.error.message,
+      kind: outcome.error.kind,
+    });
+    return {};
   }
 
   //Persist results — reads everything from ctx
@@ -274,6 +298,13 @@ export class SecurityService {
     const risk = ctx.riskAssessment!;
     const malware = ctx.malware;
 
+    const aiReport =
+      ctx.aiIntegration.state === 'ok' && Object.keys(ctx.ai).length > 0
+        ? attachOkIntegrationMeta(ctx.ai, ctx.aiIntegration)
+        : ctx.aiIntegration.state === 'failed'
+          ? failedIntegrationPayload(ctx.aiIntegration)
+          : null;
+
     const updateData: Record<string, unknown> = {
       spamScore: risk.spamScore,
       phishingScore: risk.phishingScore,
@@ -282,7 +313,7 @@ export class SecurityService {
       malwareScore: malware?.score ?? null,
       malwareVerdict: malware?.verdict ?? null,
       malwareSeverity: malware?.severity ?? null,
-      aiReport: Object.keys(ctx.ai).length ? ctx.ai : null,
+      aiReport,
     };
 
     // Move to appropriate folder

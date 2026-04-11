@@ -8,13 +8,16 @@ import { PassportModule } from '@nestjs/passport';
 import { GoogleStrategy } from './strategies/google-strategy';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { SessionsModule } from 'src/sessions/sessions.module';
+import { ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
-    JwtModule.register({
-      global: true,
-      secret: "secret",
-      signOptions: { expiresIn: '60s' },
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow('JWT_SECRET'),
+        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '7d') },
+      }),
     }),
     RedisModule.forRoot({
       type: 'single',
@@ -27,6 +30,6 @@ import { SessionsModule } from 'src/sessions/sessions.module';
   ],
   controllers: [AuthController],
   providers: [AuthService, GoogleStrategy],
-  exports: [AuthService,],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

@@ -7,11 +7,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { AnalyticsService } from './analytics.service';
 import { TokenGuard } from '../auth/guards/auth.guard';
 import { ActivityPeriodDto } from './dto/activity-period.dto';
 
 @ApiTags('analytics')
+@ApiStandardErrorResponses()
 @Controller('analytics')
 @UseGuards(TokenGuard)
 @ApiBearerAuth()

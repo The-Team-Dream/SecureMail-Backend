@@ -35,7 +35,10 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
+import { ApiErrorResponseDto } from 'src/common/swagger/api-error-response.dto';
 import { EmailsService } from './emails.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { PaginatedQueryDto } from './dto/paginated-query.dto';
@@ -56,6 +59,7 @@ const AUTH_ERRORS = {
 };
 
 @ApiTags('Emails')
+@ApiStandardErrorResponses()
 @Controller('mailboxes/:mailboxId')
 @UseGuards(TokenGuard)
 @ApiBearerAuth()
@@ -83,7 +87,7 @@ export class EmailsController {
   @ApiQuery({ name: 'page',  required: false, description: 'Page number (1-based)', example: 1 })
   @ApiQuery({ name: 'limit', required: false, description: 'Emails per page (max 100)', example: 20 })
   @ApiResponse({ status: 200, description: 'Paginated inbox email list returned successfully' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
   getInbox(
     @Req() req: { user: { id: number } },
@@ -104,7 +108,7 @@ export class EmailsController {
   @ApiQuery({ name: 'page',  required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiResponse({ status: 200, description: 'Paginated sent email list returned successfully' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
   getSent(
     @Req() req: { user: { id: number } },
@@ -125,7 +129,7 @@ export class EmailsController {
   @ApiQuery({ name: 'page',  required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiResponse({ status: 200, description: 'Paginated spam email list returned successfully' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
   getSpam(
     @Req() req: { user: { id: number } },
@@ -146,7 +150,7 @@ export class EmailsController {
   @ApiQuery({ name: 'page',  required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiResponse({ status: 200, description: 'Paginated phishing email list returned successfully' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
   getPhishing(
     @Req() req: { user: { id: number } },
@@ -170,7 +174,7 @@ export class EmailsController {
   })
   @ApiParam({ name: 'id', description: 'Email ID', example: 42, type: Number })
   @ApiResponse({ status: 200, description: 'Email details returned successfully' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Email not found in this mailbox, or mailbox does not belong to this user' })
   findOne(
     @Req() req: { user: { id: number } },
@@ -192,7 +196,7 @@ export class EmailsController {
   @ApiParam({ name: 'id', description: 'Email ID', example: 42, type: Number })
   @ApiResponse({ status: 200, description: 'Email read status updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body — `read` field must be a boolean' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Email not found in this mailbox' })
   markRead(
     @Req() req: { user: { id: number } },
@@ -210,7 +214,7 @@ export class EmailsController {
   })
   @ApiParam({ name: 'id', description: 'Email ID', example: 42, type: Number })
   @ApiResponse({ status: 200, description: 'Email moved to trash or permanently deleted' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Email not found in this mailbox' })
   delete(
     @Req() req: { user: { id: number } },
@@ -228,7 +232,7 @@ export class EmailsController {
   @ApiParam({ name: 'id', description: 'Email ID', example: 42, type: Number })
   @ApiResponse({ status: 200, description: 'Email reported and moved to the appropriate folder' })
   @ApiResponse({ status: 400, description: 'Invalid report type — must be "spam" or "phishing"' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Email not found in this mailbox' })
   report(
     @Req() req: { user: { id: number } },
@@ -247,7 +251,7 @@ export class EmailsController {
   @ApiParam({ name: 'id', description: 'Email ID', example: 42, type: Number })
   @ApiResponse({ status: 200, description: 'Email reclassified and moved to the target folder' })
   @ApiResponse({ status: 400, description: 'Invalid folder type — must be one of: inbox, sent, spam, phishing, trash' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Email not found in this mailbox' })
   reclassify(
     @Req() req: { user: { id: number } },
@@ -299,7 +303,7 @@ export class EmailsController {
   })
   @ApiResponse({ status: 202, description: 'Email successfully queued for sending' })
   @ApiResponse({ status: 400, description: 'Validation error — missing required fields, invalid email address, or attachment too large' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
   async send(
     @Req() req: { user: { id: number } },
@@ -345,7 +349,7 @@ export class EmailsController {
   })
   @ApiResponse({ status: 202, description: 'Reply successfully queued for sending' })
   @ApiResponse({ status: 400, description: 'Validation error — content is required and cannot be empty' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Email or mailbox not found' })
   async reply(
     @Req() req: { user: { id: number } },
@@ -394,7 +398,7 @@ export class EmailsController {
   })
   @ApiResponse({ status: 202, description: 'Forward successfully queued for sending' })
   @ApiResponse({ status: 400, description: 'Validation error — recipient email address is required and must be valid' })
-  @ApiResponse({ status: 401, description: AUTH_ERRORS[401] })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
   @ApiResponse({ status: 404, description: 'Email or mailbox not found' })
   async forward(
     @Req() req: { user: { id: number } },

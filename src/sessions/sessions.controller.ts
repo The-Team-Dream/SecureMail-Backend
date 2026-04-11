@@ -15,6 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { SessionResponseDto } from './dto/session-response.dto';
 import { SessionsService } from './sessions.service';
 import { TokenGuard } from 'src/auth/guards/auth.guard';
@@ -25,6 +26,7 @@ interface RequestWithUser {
 }
 
 @ApiTags('sessions')
+@ApiStandardErrorResponses()
 @ApiBearerAuth()
 @Controller('sessions')
 @UseGuards(TokenGuard)

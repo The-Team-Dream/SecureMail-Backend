@@ -73,7 +73,7 @@ export class BehaviorService {
     const history = await this.prisma.email.findMany({
       where: {
         mailBoxId: email.mailBoxId,
-        fromAddr:  { contains: senderDomain },
+        fromAddr: { endsWith: `@${senderDomain}` },
       },
       // FIX-4: أضفنا bodyText للـ topic inference
       select: { subject: true, bodyText: true, isSpam: true, isPhishing: true, receivedAt: true },

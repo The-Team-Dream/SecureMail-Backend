@@ -15,6 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { NotificationsService } from './notifications.service';
 import { TokenGuard } from '../auth/guards/auth.guard';
 import { PaginatedNotificationsDto } from './dto/paginated-notifications.dto';
@@ -23,6 +24,7 @@ function ApiParamIdDecorator() {
 }
 
 @ApiTags('notifications')
+@ApiStandardErrorResponses()
 @Controller('notifications')
 @UseGuards(TokenGuard)
 @ApiBearerAuth()

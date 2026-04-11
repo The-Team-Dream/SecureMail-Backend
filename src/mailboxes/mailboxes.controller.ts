@@ -17,6 +17,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { MailboxesService } from './mailboxes.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { TokenGuard } from '../auth/guards/auth.guard';
@@ -26,6 +27,7 @@ import { ConnectImapDto } from './dto/connect-imap.dto';
 import { UpdateMailboxDto } from './dto/update-mailbox.dto';
 
 @ApiTags('mailboxes')
+@ApiStandardErrorResponses()
 @Controller('mailboxes')
 @UseGuards(TokenGuard)
 @ApiBearerAuth()

@@ -40,82 +40,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  Controller, Get, Post, Body, Query,
-  HttpCode, HttpStatus, Logger, Optional,
+  Controller, Get, Post, Body,
+  HttpCode, HttpStatus, Logger,
 } from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SecurityService, SecurityPipelineInput } from './security.service';
 import { IntelligenceCacheService } from './intelligence/intelligence-cache.service';
-import { IsArray, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
-
-// ─── DTOs ─────────────────────────────────────────────────────────────────────
-
-class AnalyzeEmailDto {
-  @IsOptional()
-  @IsString()
-  fromAddr?: string;
-
-  @IsOptional()
-  @IsString()
-  fromName?: string;
-
-  @IsOptional()
-  @IsString()
-  toAddr?: string;
-
-  @IsOptional()
-  @IsString()
-  subject?: string;
-
-  @IsOptional()
-  @IsString()
-  bodyText?: string;
-
-  @IsOptional()
-  @IsString()
-  bodyHtml?: string;
-
-  @IsOptional()
-  @IsObject()
-  headers?: Record<string, string>;
-
-  @IsOptional()
-  @IsNumber()
-  mailBoxId?: number;
-
-  @IsOptional()
-  @IsNumber()
-  userId?: number;
-
-  @IsOptional()
-  @IsArray()
-  attachments?: Array<{
-    filename: string;
-    mimeType: string;
-    size: number;
-    storagePath: string;
-  }>;
-}
-
-class IntelUrlDto {
-  @IsOptional()
-  @IsString() url!: string;
-}
-class IntelIpDto {
-  @IsOptional()
-  @IsString() ip!: string;
-}
-class IntelDomainDto {
-  @IsOptional()
-  @IsString() domain!: string;
-}
-class CacheInvalidateDto {
-  @IsOptional()
-  @IsString()
-  type!: 'url' | 'ip' | 'domain';
-  @IsOptional()
-  @IsString()
-  value!: string;
-}
+import { Throttle } from '@nestjs/throttler';
+import {
+  AnalyzeEmailDto,
+  CacheInvalidateDto,
+  IntelDomainDto,
+  IntelIpDto,
+  IntelUrlDto,
+} from './dto/security-test.dto';
+import { ApiOkWrapped, ApiPublicErrorResponses } from 'src/common/swagger';
 
 // ─── Scenario definitions ──────────────────────────────────────────────────────
 
@@ -229,7 +168,10 @@ const SCENARIOS: Record<string, SecurityPipelineInput & { _userId: number }> = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+@ApiTags('security-test')
+@ApiPublicErrorResponses()
 @Controller('security-test')
+@Throttle({ default: { limit: 5, ttl: 60000 } })
 export class SecurityTestController {
   private readonly logger = new Logger(SecurityTestController.name);
 
@@ -248,6 +190,16 @@ export class SecurityTestController {
    */
   @Post('analyze')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Run security pipeline on custom payload',
+    description: 'Dev/test only. Disabled in production deployments that omit SecurityTestModule.',
+  })
+  @ApiBody({ type: AnalyzeEmailDto })
+  @ApiOkWrapped('Pipeline result summary', {
+    scenario: 'custom',
+    processingMs: 120,
+    verdict: { label: 'SUSPICIOUS', riskScore: 0.72 },
+  })
   async analyze(@Body() dto: AnalyzeEmailDto) {
     const input: SecurityPipelineInput = {
       emailId: `test-${Date.now()}`,
@@ -274,30 +226,40 @@ export class SecurityTestController {
    */
   @Post('analyze/phishing')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Run built-in phishing scenario' })
+  @ApiOkWrapped('Pipeline result', { scenario: 'phishing', processingMs: 100 })
   async analyzePhishing() {
     return this.runScenario('phishing');
   }
 
   @Post('analyze/bec')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Run built-in BEC scenario' })
+  @ApiOkWrapped('Pipeline result', { scenario: 'bec', processingMs: 100 })
   async analyzeBec() {
     return this.runScenario('bec');
   }
 
   @Post('analyze/malware')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Run built-in malware scenario' })
+  @ApiOkWrapped('Pipeline result', { scenario: 'malware', processingMs: 100 })
   async analyzeMalware() {
     return this.runScenario('malware');
   }
 
   @Post('analyze/spam')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Run built-in spam scenario' })
+  @ApiOkWrapped('Pipeline result', { scenario: 'spam', processingMs: 100 })
   async analyzeSpam() {
     return this.runScenario('spam');
   }
 
   @Post('analyze/clean')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Run built-in clean email scenario' })
+  @ApiOkWrapped('Pipeline result', { scenario: 'clean', processingMs: 100 })
   async analyzeClean() {
     return this.runScenario('clean');
   }
@@ -311,6 +273,8 @@ export class SecurityTestController {
    * Returns Redis cache statistics.
    */
   @Get('cache/stats')
+  @ApiOperation({ summary: 'Intelligence cache statistics' })
+  @ApiOkWrapped('Cache stats', { timestamp: '2026-04-11T00:00:00.000Z', intel: {} })
   async getCacheStats() {
     const [intelStats] = await Promise.all([
       this.intel.getCacheStats(),
@@ -327,6 +291,9 @@ export class SecurityTestController {
    */
   @Post('cache/invalidate')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Invalidate intel cache entry' })
+  @ApiBody({ type: CacheInvalidateDto })
+  @ApiOkWrapped('Invalidation result', { success: true, invalidated: 'url:https://x' })
   async invalidateCache(@Body() dto: CacheInvalidateDto) {
     await this.intel.invalidate(dto.type, dto.value);
     return { success: true, invalidated: `${dto.type}:${dto.value}` };
@@ -339,6 +306,9 @@ export class SecurityTestController {
    */
   @Post('intel/url')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Lookup URL reputation (test)' })
+  @ApiBody({ type: IntelUrlDto })
+  @ApiOkWrapped('URL intel', { malicious: false, lookupMs: 12 })
   async lookupUrl(@Body() dto: IntelUrlDto) {
     const start = Date.now();
     const result = await this.intel.lookupUrl(dto.url);
@@ -351,6 +321,9 @@ export class SecurityTestController {
    */
   @Post('intel/ip')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Lookup IP reputation (test)' })
+  @ApiBody({ type: IntelIpDto })
+  @ApiOkWrapped('IP intel', { lookupMs: 8 })
   async lookupIp(@Body() dto: IntelIpDto) {
     const start = Date.now();
     const result = await this.intel.lookupIp(dto.ip);
@@ -363,6 +336,9 @@ export class SecurityTestController {
    */
   @Post('intel/domain')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Lookup domain reputation (test)' })
+  @ApiBody({ type: IntelDomainDto })
+  @ApiOkWrapped('Domain intel', { lookupMs: 10 })
   async lookupDomain(@Body() dto: IntelDomainDto) {
     const start = Date.now();
     const result = await this.intel.lookupDomain(dto.domain);

@@ -23,6 +23,8 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ApiErrorResponseDto } from './common/swagger/api-error-response.dto';
+import { ApiSuccessEnvelopeDto } from './common/swagger/api-success-envelope.dto';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
@@ -91,7 +93,7 @@ async function bootstrap() {
     origin: process.env.FRONTEND_URL ?? 'http://localhost:3001',
     credentials: true,
     // Explicitly list allowed methods to reduce attack surface
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
@@ -107,12 +109,45 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('SecureMail API')
-    .setDescription('SecureMail Backend API')
-    .setVersion('1.0')
-    .addBearerAuth()
+    .setDescription(
+      [
+        'Production REST API for SecureMail (NestJS).',
+        '',
+        '**Response shape:** Successful JSON responses are wrapped as `{ success: true, message: string, data: T }` (global interceptor).',
+        'Errors use `{ success: false, statusCode, message, errors, path, timestamp }`.',
+        '',
+        '**Auth:** Send `Authorization: Bearer <access_token>` unless the operation is marked public.',
+        '',
+        '**OpenAPI JSON:** `GET /api/docs-json` (for codegen in Flutter / TypeScript clients).',
+      ].join('\n'),
+    )
+    .setVersion('1.0.0')
+    .setContact('SecureMail', 'https://github.com/securemail', 'api@securemail.local')
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      description: 'JWT access token from POST /auth/login or POST /auth/verify-2fa',
+    })
+    .addServer(process.env.PUBLIC_API_URL ?? 'http://localhost:3000', 'Current')
+    .addServer('http://localhost:3000', 'Local default')
     .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+
+  const document = SwaggerModule.createDocument(app, config, {
+    extraModels: [ApiErrorResponseDto, ApiSuccessEnvelopeDto],
+    operationIdFactory: (controllerKey: string, methodKey: string) =>
+      `${controllerKey.replace(/Controller$/, '')}_${methodKey}`,
+  });
+
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      docExpansion: 'list',
+      filter: true,
+      showRequestDuration: true,
+    },
+    customSiteTitle: 'SecureMail API Docs',
+  });
 
   await app.listen(process.env.PORT ?? 3000);
 }

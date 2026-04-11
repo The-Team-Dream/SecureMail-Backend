@@ -1,4 +1,5 @@
 import {
+  AiIntegrationMeta,
   AiSignals,
   AuthSignals,
   CorrelationResult,
@@ -34,6 +35,7 @@ export class DetectionContext {
   verdict: FinalVerdict | null = null;
   // ── Stage 13: AI Report (set by AiAgentService) ───────────────────────────
   ai: AiSignals = {};
+  aiIntegration: AiIntegrationMeta = { state: 'skipped', atMs: 0 };
 
   constructor(
     parsedEmail: ParsedEmail,
@@ -64,6 +66,10 @@ export class DetectionContext {
 
   setAiReport(result: AiSignals | null | undefined): void {
     this.ai = result ?? {};
+  }
+
+  setAiIntegration(meta: AiIntegrationMeta | null | undefined): void {
+    this.aiIntegration = meta ?? { state: 'skipped', atMs: Date.now() };
   }
   setMalware(result: MalwareSignals | null | undefined): void {
     this.malware = result ?? {};

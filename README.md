@@ -1,98 +1,112 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# SecureMail Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS REST API for SecureMail: authentication, mailboxes, email operations, security pipeline, notifications, admin, and OpenAPI (Swagger) documentation.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tech stack
 
-## Description
+- **Runtime:** Node.js 20+
+- **Framework:** NestJS 11
+- **Database:** PostgreSQL (Prisma)
+- **Cache / queues:** Redis (BullMQ, throttling, etc.)
+- **API docs:** `@nestjs/swagger` — UI at `/api/docs`, JSON at `/api/docs-json`
+- **Internal:** gRPC client to **SecureMail-Ai** (`contracts/ai-agent.proto`)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Ports
 
-## Project setup
+| Environment | Port | Notes |
+|-------------|------|--------|
+| Local / Docker | `3000` (default) | Override with `PORT` |
+
+## API documentation (Swagger / OpenAPI)
+
+| Resource | URL (local default) |
+|----------|---------------------|
+| **Swagger UI** | http://localhost:3000/api/docs |
+| **OpenAPI JSON** | http://localhost:3000/api/docs-json |
+
+**For frontend & Flutter teams**
+
+1. Download or fetch: `curl -s http://localhost:3000/api/docs-json -o openapi.json`
+2. Run your codegen (e.g. openapi-typescript, orval, openapi_generator for Dart).
+3. All successful responses use the global wrapper `{ success: true, message, data }`; errors match the documented error schema in Swagger.
+
+## Environment variables (common)
+
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | HTTP port (default `3000`) |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_HOST` / `REDIS_PORT` | Redis |
+| `JWT_SECRET` | **Required** for JWT signing |
+| `FRONTEND_URL` | CORS origin (e.g. `http://localhost:3001`) |
+| `PUBLIC_API_URL` | Shown as server URL in OpenAPI (optional) |
+| `AI_AGENT_GRPC_URL` | AI gRPC address (e.g. `localhost:50051` or `ai:50051` in Docker) |
+| `MALWARE_ENGINE_GRPC_URL` | Optional malware gRPC service |
+
+Copy from your team’s `.env.example` if present; for Docker stack see repo root `.env.docker.example`.
+
+## Run locally (step-by-step)
+
+**Prerequisites:** Node 20+, pnpm, PostgreSQL, Redis, and (for full security features) **SecureMail-Ai** running on gRPC.
+
+1. Install dependencies:
+   ```bash
+   pnpm install
+   ```
+2. Ensure repo root contains `contracts/ai-agent.proto` (used at build/runtime).
+3. Set `DATABASE_URL`, `JWT_SECRET`, `REDIS_*`, `AI_AGENT_GRPC_URL` in `.env`.
+4. Apply migrations:
+   ```bash
+   pnpm exec prisma migrate deploy
+   ```
+5. Start dev server:
+   ```bash
+   pnpm run start:dev
+   ```
+6. Open **http://localhost:3000/api/docs**
+
+## Run with Docker
+
+Images are built from the **monorepo root** (not from this folder alone):
 
 ```bash
-$ npm install
+cd ..
+docker compose up --build backend
 ```
 
-## Compile and run the project
+Or start the full stack: see root [README.md](../README.md).
 
-```bash
-# development
-$ npm run start
+The backend image runs `prisma migrate deploy` on startup, then `node dist/main.js`.
 
-# watch mode
-$ npm run start:dev
+## API surface (high level)
 
-# production mode
-$ npm run start:prod
-```
+REST routes are grouped in Swagger by tags, for example:
 
-## Run tests
+- `auth` — register, login, 2FA, OAuth callbacks, password reset  
+- `user`, `user-settings` — profile and settings  
+- `mailboxes`, `Emails` — mailbox connect and email CRUD / send  
+- `notifications`, `sessions`, `analytics`  
+- `admin/*` — admin-only (JWT + role)  
+- `security-test` — dev/test pipeline endpoints (if module enabled)  
+- `health` — root `/` liveness
 
-```bash
-# unit tests
-$ npm run test
+**Authoritative list:** always use **Swagger UI** or **`/api/docs-json`**.
 
-# e2e tests
-$ npm run test:e2e
+## Troubleshooting
 
-# test coverage
-$ npm run test:cov
-```
+| Issue | What to check |
+|-------|----------------|
+| `contracts/ai-agent.proto not found` | Run from `SecureMail-Backend` with monorepo `contracts/` present, or use Docker image that copies `contracts/` into `/app/contracts`. |
+| Build fails `prebuild` | `scripts/assert-contracts.cjs` must find the shared proto (monorepo or `/app/contracts`). |
+| AI timeouts / empty AI report | Is **SecureMail-Ai** up? `AI_AGENT_GRPC_URL` correct? `GROQ_API_KEY` set on AI service? |
+| CORS errors from browser | `FRONTEND_URL` must match the web app origin. |
+| Prisma errors | `DATABASE_URL`, migrations, Postgres reachable. |
 
-## Deployment
+## Scripts
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Command | Purpose |
+|---------|---------|
+| `pnpm run proto:check` | Verifies shared `ai-agent.proto` exists |
+| `pnpm run build` | Production build |
+| `pnpm run start:dev` | Watch mode |
+| `pnpm run test` | Unit tests |

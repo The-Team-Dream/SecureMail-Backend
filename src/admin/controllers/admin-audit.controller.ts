@@ -6,6 +6,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { AdminAuditService } from '../services/admin-audit.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -14,6 +15,7 @@ import { Role } from 'generated/prisma/enums';
 import { AdminAuditLogsQueryDto } from '../dto/audit-logs-query.dto';
 
 @ApiTags('admin/audit-logs')
+@ApiStandardErrorResponses()
 @Controller('admin/audit-logs')
 @UseGuards(TokenGuard, RolesGuard)
 @Roles(Role.ADMIN)

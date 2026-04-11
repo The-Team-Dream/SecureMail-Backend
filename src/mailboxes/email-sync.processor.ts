@@ -154,7 +154,7 @@ export class EmailSyncProcessor extends WorkerHost {
         });
       }
 
-      const { messages } = await this.gmailProvider.listMessages(gmail, 'me', [labelId], 100);
+      const { messages } = await this.gmailProvider.listMessages(gmail, 'me', [labelId], 1000);
 
       for (const msg of messages) {
         const full = await this.gmailProvider.getMessage(gmail, 'me', msg.id);
@@ -385,6 +385,16 @@ export class EmailSyncProcessor extends WorkerHost {
       where: { mailBoxId_folderId_messageId: { mailBoxId, folderId, messageId } },
     });
 
+    if (existing) {
+      await this.prisma.email.update({
+        where: { id: existing.id },
+        data: {
+          isRead:    data.isRead,
+          isFlagged: data.isFlagged,
+        },
+      });
+      return;
+    }
     // ── 2. Upsert email ────────────────────────────────────────────────────────
     const email = await this.prisma.email.upsert({
       where:  { mailBoxId_folderId_messageId: { mailBoxId, folderId, messageId } },

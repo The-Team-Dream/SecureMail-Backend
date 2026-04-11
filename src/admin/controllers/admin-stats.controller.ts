@@ -1,5 +1,6 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { AdminStatsService } from '../services/admin-stats.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -7,6 +8,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from 'generated/prisma/enums';
 
 @ApiTags('admin/stats')
+@ApiStandardErrorResponses()
 @Controller('admin/stats')
 @UseGuards(TokenGuard, RolesGuard)
 @Roles(Role.ADMIN)

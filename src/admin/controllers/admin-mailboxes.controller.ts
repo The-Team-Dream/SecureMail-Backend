@@ -14,6 +14,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { AdminMailboxesService } from '../services/admin-mailboxes.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -22,6 +23,7 @@ import { Role } from 'generated/prisma/enums';
 import { AdminPaginatedDto } from '../dto/common.dto';
 
 @ApiTags('admin/mailboxes')
+@ApiStandardErrorResponses()
 @Controller('admin/mailboxes')
 @UseGuards(TokenGuard, RolesGuard)
 @Roles(Role.ADMIN)

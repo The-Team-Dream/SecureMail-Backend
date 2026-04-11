@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { AdminNotificationsService } from '../services/admin-notifications.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -25,6 +26,7 @@ import { BroadcastNotificationDto } from '../dto/broadcast-notification.dto';
 import { AdminPaginatedDto } from '../dto/common.dto';
 
 @ApiTags('admin/notifications')
+@ApiStandardErrorResponses()
 @Controller('admin/notifications')
 @UseGuards(TokenGuard, RolesGuard)
 @Roles(Role.ADMIN)

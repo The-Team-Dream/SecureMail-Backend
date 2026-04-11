@@ -12,6 +12,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiStandardErrorResponses } from 'src/common/swagger';
 import { AdminEmailsService } from '../services/admin-emails.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -21,6 +22,7 @@ import { AdminEmailsQueryDto } from '../dto/emails-query.dto';
 import { AdminPaginatedDto } from '../dto/common.dto';
 
 @ApiTags('admin/emails')
+@ApiStandardErrorResponses()
 @Controller('admin/emails')
 @UseGuards(TokenGuard, RolesGuard)
 @Roles(Role.ADMIN)

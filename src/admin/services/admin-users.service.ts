@@ -45,8 +45,6 @@ export class AdminUsersService {
     }
 
     const skip = (page - 1) * limit;
-
-    console.log('where:', JSON.stringify(where, null, 2));
     
     const [data, total] = await Promise.all([
       this.prisma.user.findMany({
