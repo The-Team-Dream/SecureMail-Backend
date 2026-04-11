@@ -5,6 +5,11 @@ export interface MalwareSignals {
     score?: number;
     severity?: string;
     report?: string;
+    isMalicious?: boolean;
+    confidence?: number;
+    threatType?: string;
+    engineName?: string;
+    scanTimeMs?: number;
 }
 
 /** API / persistence shape (camelCase). Aligns with `AnalysisReport` from gRPC after mapping. */
@@ -38,6 +43,18 @@ export type AiIntegrationFailureKind =
 export interface AiIntegrationMeta {
     state: AiIntegrationState;
     atMs: number;
+    grpcCode?: number;
+    message?: string;
+    kind?: AiIntegrationFailureKind;
+}
+
+export type MalwareIntegrationState = 'ok' | 'failed' | 'skipped';
+
+export interface MalwareIntegrationMeta {
+    state: MalwareIntegrationState;
+    atMs: number;
+    latencyMs?: number;
+    engineLatencyMs?: number;
     grpcCode?: number;
     message?: string;
     kind?: AiIntegrationFailureKind;

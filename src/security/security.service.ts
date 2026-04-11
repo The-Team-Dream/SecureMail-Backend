@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { MalwareService } from './pipeline/6-malware/malware.service';
+import type { MalwarePipelinePack } from './pipeline/6-malware/malware.types';
+import {
+    scanFileResponseToSignals,
+    attachMalwareOkIntegrationMeta,
+    failedMalwareIntegrationPayload,
+} from './pipeline/6-malware/malware.mapping';
 import { AiAgentService } from './pipeline/10-ai-agent/ai-agent.service';
 import {
     analysisReportToAiSignals,
@@ -21,7 +27,14 @@ import { BehaviorService } from './pipeline/4-behavior/behavior.service';
 import { ScoringService } from './pipeline/8-scoring/scoring.service';
 import { DecisionService } from './pipeline/9-decision/decision.service';
 import { DetectionContext, } from './pipeline/7-detection/rule-engine/detection-context';
-import { AiSignals, FinalVerdict, MalwareSignals, ParsedEmail, RawEmailInput } from 'src/security/types';
+import {
+  AiIntegrationFailureKind,
+  AiSignals,
+  FinalVerdict,
+  MalwareSignals,
+  ParsedEmail,
+  RawEmailInput,
+} from 'src/security/types';
 import { EmailParserService } from './pipeline/1-email-parser/email-parser.service';
 import { DEFAULT_BEHAVIOR, UNKNOWN_REPUTATION } from 'src/security/constants';
 
@@ -37,7 +50,7 @@ export interface SecurityPipelineResult {
   ruleHits: Array<{ rule: string; score: number; description: string }>;
   aiReport: Record<string, unknown> | null;
   processingMs: number;
-  malwareScan: MalwareSignals;
+  malwareScan: Record<string, unknown>;
 }
 
 @Injectable()
@@ -92,17 +105,37 @@ export class SecurityService {
     //Stage 1: Email Parsing 
     const parsedEmail = this.emailParser.parse(input);
     //Stages: 2,3,4,5,6 in parallel with each other
-    const malwarePromise = this.runMalwareAnalysis(input);
-    const [authSignals, reputationSignals, behaviorSignals, urlAnalysisSignals, malwareSignals] = await Promise.all([
+    const malwarePromise = this.runMalwareScan(input);
+    const [authSignals, reputationSignals, behaviorSignals, urlAnalysisSignals, malwareRace] = await Promise.all([
       this.authentication.analyze(parsedEmail),
       this.reputation.check(parsedEmail).catch(() => UNKNOWN_REPUTATION),
       this.behavior.analyze(parsedEmail).catch(() => DEFAULT_BEHAVIOR),
       this.urlAnalysis.analyze(parsedEmail).catch(() => null),
       Promise.race([
         malwarePromise,
-        new Promise<null>(r => setTimeout(() => r(null), 5000)),
+        new Promise<'timeout'>(r => setTimeout(() => r('timeout'), 5000)),
       ]),
     ]);
+
+    let malwarePack: MalwarePipelinePack;
+    if (malwareRace === 'timeout') {
+      if (!input.attachments?.length) {
+        malwarePack = await malwarePromise;
+      } else {
+        malwarePack = {
+          signals: null,
+          integration: {
+            state: 'failed',
+            atMs: Date.now(),
+            kind: 'deadline',
+            message: 'Malware scan exceeded synchronous pipeline window (5s)',
+          },
+        };
+      }
+    } else {
+      malwarePack = malwareRace;
+    }
+
     //Stage 7: Build Detection Context and pass it to rule engine
     const ctx = new DetectionContext(
       parsedEmail,
@@ -110,7 +143,8 @@ export class SecurityService {
       reputationSignals,
       behaviorSignals,
       urlAnalysisSignals,
-      malwareSignals,
+      malwarePack.signals,
+      malwarePack.integration,
     );
     await this.ruleEngine.runRuleEngine(ctx);
 
@@ -143,39 +177,49 @@ export class SecurityService {
     //Stage 14: Notifications — reads everything from ctx
     await this.sendNotifications(input, userId, ctx);
 
-    // If malware scanning in porgress, run it in background
-    if (!malwareSignals) {
-      malwarePromise.then(async (result) => {
-        if (!result || result.verdict !== 'malicious') return;
-        const emailId = Number(input.emailId);
-        const mailBoxId = Number(input.mailBoxId);
-        //1. Update malware fields 
-        const folder = await this.getOrCreateFolder(mailBoxId, FolderType.MALWARE);
-        await this.prisma.email.update({
-          where: { id: emailId },
-          data: {
-            malwareScore: result.score,
-            malwareVerdict: result.verdict,
-            malwareSeverity: result.severity,
-            isPhishing: false,
-            isSpam: false,
-            folderId: folder.id,
-          },
-        });
-        //2. Notify user 
-        await this.notify(
-          userId, mailBoxId, emailId,
-          NotificationType.MALWARE_DETECTED,
-          'Malware Detected',
-          `Malicious attachment detected in: ${input.subject}`,
-          { emailId, malwareScore: result.score, malwareVerdict: result.verdict },
-        );
+    // If malware scanning still running after sync window, finish in background (late malicious verdict)
+    if (malwareRace === 'timeout' && input.attachments?.length) {
+      malwarePromise
+        .then(async pack => {
+          const sig = pack.signals;
+          if (!sig || sig.verdict !== 'malicious') return;
+          const emailId = Number(input.emailId);
+          const mailBoxId = Number(input.mailBoxId);
+          const folder = await this.getOrCreateFolder(mailBoxId, FolderType.MALWARE);
+          await this.prisma.email.update({
+            where: { id: emailId },
+            data: {
+              malwareScore: sig.score ?? 0,
+              malwareVerdict: sig.verdict,
+              malwareSeverity: sig.severity ?? 'Critical',
+              isPhishing: false,
+              isSpam: false,
+              folderId: folder.id,
+            },
+          });
+          await this.notify(
+            userId,
+            mailBoxId,
+            emailId,
+            NotificationType.MALWARE_DETECTED,
+            'Malware Detected',
+            `Malicious attachment detected in: ${input.subject}`,
+            { emailId, malwareScore: sig.score, malwareVerdict: sig.verdict },
+          );
 
-        this.logger.warn('Post-delivery malware detected', {
-          emailId, score: result.score, verdict: result.verdict,
+          this.logger.warn('Post-delivery malware detected', {
+            emailId,
+            score: sig.score,
+            verdict: sig.verdict,
+            integration: pack.integration,
+          });
+        })
+        .catch(err => {
+          this.logger.warn('Background malware completion failed', {
+            emailId: input.emailId,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
-      })
-        .catch(() => null);
     }
 
     const processingMs = Date.now() - startMs;
@@ -201,11 +245,40 @@ export class SecurityService {
       })),
       aiReport: this.buildAiReportSnapshot(ctx),
       processingMs,
-      malwareScan: ctx.malware
-        ? { status: 'completed', message: 'Malware scan completed', verdict: ctx.malware.verdict, score: ctx.malware.score, severity: ctx.malware.severity }
-        : input.attachments?.length
-          ? { status: 'pending', message: 'Malware scan in progress — you will be notified if a threat is found' }
-          : { status: 'not_applicable', message: 'No attachments' },
+      malwareScan: this.buildMalwareScanSnapshot(ctx, input),
+    };
+  }
+
+  private buildMalwareScanSnapshot(
+    ctx: DetectionContext,
+    input: SecurityPipelineInput,
+  ): Record<string, unknown> {
+    if (ctx.malwareIntegration.state === 'ok' && ctx.malware) {
+      return attachMalwareOkIntegrationMeta(ctx.malware, ctx.malwareIntegration);
+    }
+    if (ctx.malwareIntegration.state === 'failed') {
+      const base = failedMalwareIntegrationPayload(ctx.malwareIntegration);
+      if (ctx.malwareIntegration.kind === 'deadline' && input.attachments?.length) {
+        return {
+          ...base,
+          message:
+            'Malware scan still running — you will be notified if a threat is found',
+          status: 'pending',
+        };
+      }
+      return base;
+    }
+    if (!input.attachments?.length) {
+      return {
+        __integration: ctx.malwareIntegration,
+        status: 'not_applicable',
+        message: 'No attachments',
+      };
+    }
+    return {
+      __integration: ctx.malwareIntegration,
+      status: 'not_applicable',
+      message: 'Malware scan not available',
     };
   }
 
@@ -219,25 +292,73 @@ export class SecurityService {
     return null;
   }
 
-  //Malware analysis (reuses existing MalwareService) 
-  private async runMalwareAnalysis(input: SecurityPipelineInput): Promise<MalwareSignals | null> {
-    if (!input.attachments || input.attachments.length === 0) return null;
-    let worstScore = 0;
-    let worstVerdict = 'clean';
-    let worstSeverity = 'Low';
+  private mergeMalwareSignals(a: MalwareSignals, b: MalwareSignals): MalwareSignals {
+    const sa = a.score ?? 0;
+    const sb = b.score ?? 0;
+    return sa >= sb ? a : b;
+  }
+
+  /** Aggregates per-attachment scans into pipeline pack + integration metadata. */
+  private async runMalwareScan(input: SecurityPipelineInput): Promise<MalwarePipelinePack> {
+    const started = Date.now();
+    const atMs = Date.now();
+    if (!input.attachments?.length) {
+      return { signals: null, integration: { state: 'skipped', atMs } };
+    }
+
+    let merged: MalwareSignals | null = null;
+    let okCount = 0;
+    let failFirst: { message: string; grpcCode?: number; kind: AiIntegrationFailureKind } | null = null;
+
     for (const att of input.attachments) {
-      const result = await this.malwareService.analyzeFile({
+      const outcome = await this.malwareService.scanFile({
         storagePath: att.storagePath,
         filename: att.filename ?? 'unknown',
-        mimeType: att.mimeType,
-      }).catch(() => null);
-      if (result && result.score > worstScore) {
-        worstScore = result.score;
-        worstVerdict = result.verdict;
-        worstSeverity = result.severity;
+        mimeType: att.mimeType ?? 'application/octet-stream',
+      });
+      if (outcome.ok) {
+        okCount += 1;
+        const sig = scanFileResponseToSignals(outcome.report);
+        merged = merged ? this.mergeMalwareSignals(merged, sig) : sig;
+      } else if (!failFirst) {
+        failFirst = outcome.error;
       }
     }
-    return { verdict: worstVerdict, score: worstScore, severity: worstSeverity };
+
+    const wallMs = Date.now() - started;
+
+    if (okCount === 0 && failFirst) {
+      return {
+        signals: null,
+        integration: {
+          state: 'failed',
+          atMs: Date.now(),
+          grpcCode: failFirst.grpcCode,
+          message: failFirst.message,
+          kind: failFirst.kind,
+          latencyMs: wallMs,
+        },
+      };
+    }
+
+    const partialNote =
+      okCount < input.attachments.length && failFirst
+        ? `partial: ${okCount}/${input.attachments.length} attachments scanned`
+        : undefined;
+    if (partialNote && failFirst) {
+      this.logger.warn(`Malware scan partial success: ${partialNote}; firstError=${failFirst.message}`);
+    }
+
+    return {
+      signals: merged,
+      integration: {
+        state: 'ok',
+        atMs: Date.now(),
+        latencyMs: wallMs,
+        engineLatencyMs: merged?.scanTimeMs,
+        ...(partialNote ? { message: partialNote } : {}),
+      },
+    };
   }
 
   //AI Agent — reads everything from ctx, returns AiSignals
@@ -408,7 +529,12 @@ export class SecurityService {
       ruleHits: [],
       aiReport: null,
       processingMs: Date.now() - startMs,
-      malwareScan: { message: "There is error during scanning, please be aware from download any attachment" }
+      malwareScan: failedMalwareIntegrationPayload({
+        state: 'failed',
+        atMs: Date.now(),
+        kind: 'internal',
+        message: 'Security pipeline error — malware scan unavailable',
+      }),
     };
   }
 }

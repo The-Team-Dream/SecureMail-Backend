@@ -4,6 +4,7 @@ import {
   AuthSignals,
   CorrelationResult,
   FinalVerdict,
+  MalwareIntegrationMeta,
   MalwareSignals,
   ParsedEmail,
   ReputationSignals,
@@ -21,6 +22,7 @@ export class DetectionContext {
   behavior: BehaviorSignals;
   urlResult: UrlAnalysisSignals | null = null;
   malware: MalwareSignals | null = null;
+  malwareIntegration: MalwareIntegrationMeta = { state: 'skipped', atMs: 0 };
   // ── Stage 8-9: Rule Engine results ───────────────────────────────────────
   ruleResults: Map<string, RuleResult> = new Map();
   // ── Stage 10: Correlation ─────────────────────────────────────────────────
@@ -44,6 +46,7 @@ export class DetectionContext {
     behavior: BehaviorSignals,
     urlResult: UrlAnalysisSignals | null = null,
     malware: MalwareSignals | null = null,
+    malwareIntegration: MalwareIntegrationMeta | null = null,
   ) {
     this.parsedEmail = parsedEmail;
     this.authResult = authResult;
@@ -51,6 +54,7 @@ export class DetectionContext {
     this.behavior = behavior;
     this.urlResult = urlResult;
     this.malware = malware;
+    this.malwareIntegration = malwareIntegration ?? { state: 'skipped', atMs: Date.now() };
   }
 
   setCorrelation(result: CorrelationResult | null | undefined): void {
@@ -72,7 +76,11 @@ export class DetectionContext {
     this.aiIntegration = meta ?? { state: 'skipped', atMs: Date.now() };
   }
   setMalware(result: MalwareSignals | null | undefined): void {
-    this.malware = result ?? {};
+    this.malware = result ?? null;
+  }
+
+  setMalwareIntegration(meta: MalwareIntegrationMeta | null | undefined): void {
+    this.malwareIntegration = meta ?? { state: 'skipped', atMs: Date.now() };
   }
 
 

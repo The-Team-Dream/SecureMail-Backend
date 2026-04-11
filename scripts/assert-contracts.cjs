@@ -2,13 +2,19 @@ const fs = require('fs');
 const path = require('path');
 
 const backendRoot = path.join(__dirname, '..');
-const candidates = [
-  path.join(backendRoot, 'contracts', 'ai-agent.proto'),
-  path.join(backendRoot, '..', 'contracts', 'ai-agent.proto'),
-];
-const contract = candidates.find((p) => fs.existsSync(p));
-if (!contract) {
-  console.error('Missing shared proto. Tried:\n', candidates.join('\n'));
-  process.exit(1);
+
+function assertProto(name) {
+  const candidates = [
+    path.join(backendRoot, 'contracts', name),
+    path.join(backendRoot, '..', 'contracts', name),
+  ];
+  const contract = candidates.find((p) => fs.existsSync(p));
+  if (!contract) {
+    console.error(`Missing shared proto ${name}. Tried:\n`, candidates.join('\n'));
+    process.exit(1);
+  }
+  console.log(`contracts/${name} OK:`, contract);
 }
-console.log('contracts/ai-agent.proto OK:', contract);
+
+assertProto('ai-agent.proto');
+assertProto('malware.proto');
