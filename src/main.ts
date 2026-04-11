@@ -130,7 +130,6 @@ async function bootstrap() {
       description: 'JWT access token from POST /auth/login or POST /auth/verify-2fa',
     })
     .addServer(process.env.PUBLIC_API_URL ?? 'http://localhost:3000', 'Current')
-    .addServer('http://localhost:3000', 'Local default')
     .build();
 
   const document = SwaggerModule.createDocument(app, config, {
