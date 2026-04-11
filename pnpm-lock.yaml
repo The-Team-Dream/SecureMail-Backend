@@ -98,6 +98,9 @@ importers:
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
+      dotenv:
+        specifier: ^16.0.0
+        version: 16.6.1
       googleapis:
         specifier: ^171.4.0
         version: 171.4.0

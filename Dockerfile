@@ -12,7 +12,7 @@ COPY SecureMail-Backend/scripts ./scripts
 COPY SecureMail-Backend/tsconfig.json SecureMail-Backend/nest-cli.json ./
 COPY SecureMail-Backend/src ./src
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 RUN pnpm exec prisma generate
 ENV NODE_ENV=production
 RUN pnpm run build
@@ -34,4 +34,4 @@ COPY SecureMail-Backend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh && mkdir -p /app/uploads
 
 EXPOSE 3000
-ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["node", "dist/src/main.js"]

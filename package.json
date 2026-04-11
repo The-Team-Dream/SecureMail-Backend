@@ -28,6 +28,7 @@
     "seed": "ts-node -r tsconfig-paths/register prisma/seed.ts"
   },
   "dependencies": {
+    "dotenv": "^16.0.0",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
