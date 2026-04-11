@@ -6,7 +6,7 @@ All successful responses are wrapped as:
 ```json
 { "success": true, "message": "Request successful", "data": { ... } }
 ```
-
+ 
 All error responses follow:
 ```json
 { "success": false, "statusCode": 400, "message": "...", "errors": [...], "path": "...", "timestamp": "..." }
