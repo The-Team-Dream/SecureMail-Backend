@@ -398,12 +398,21 @@ export class SecurityTestController {
         hasAttachment: result.parsedEmail.hasAttachment,
         isReplyThread: result.parsedEmail.isReplyThread,
       },
-      // ── AI report (if available) ──────────────────────────────────────────
+      // ── AI report (full analytical report from gRPC) ──────────────────────
       aiReport: result.aiReport ? {
         verdict: result.aiReport.verdict,
+        severity: result.aiReport.severity,
+        confidence: result.aiReport.confidence,
+        explanation: result.aiReport.explanation,
         summary: result.aiReport.summary,
         isCampaign: result.aiReport.isCampaign,
-        isAnomaly: result.aiReport.behavioral_anomaly,
+        campaignDescription: result.aiReport.campaignDescription,
+        priority: result.aiReport.priority,
+        priorityReason: result.aiReport.priorityReason,
+        behavioralAnomaly: result.aiReport.behavioralAnomaly,
+        anomalyDescription: result.aiReport.anomalyDescription,
+        recommendation: result.aiReport.recommendation,
+        replySuggestions: result.aiReport.replySuggestions,
       } : null,
 
       // ── Input echo (for debugging) ────────────────────────────────────────

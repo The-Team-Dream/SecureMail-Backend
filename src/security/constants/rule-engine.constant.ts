@@ -233,6 +233,7 @@ export const WHITELISTED_DOMAINS = new Set([
   'shopify.com', 'hubspot.com', 'dropbox.com', 'notion.so',
   'fawry.com', 'instapay.com.eg',
   'nbe.com.eg', 'cib.com.eg', 'banquemisr.com',
+  'yourcompany.com',
 ]);
 
 // ─── Rule Weights ─────────────────────────────────────────────────────────────

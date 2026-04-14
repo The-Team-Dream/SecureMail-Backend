@@ -3,65 +3,40 @@ version: '3.9'
 services:
 
   # ─── NestJS App ─────────────────────────────────────────────────
-  app:
+  backend:
     build:
       context: ..
       dockerfile: SecureMail-Backend/Dockerfile
       target: production
-    container_name: securemail_app
+    container_name: securemail_backend
     restart: unless-stopped
     ports:
       - '${APP_PORT:-3000}:3000'
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-
-      # PostgreSQL via Prisma
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-0000}@postgres:5432/${DB_NAME:-securemail}?schema=public
-
-      # JWT
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-
-      # Mailer (SMTP)
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
       SMTP_USERNAME: ${SMTP_USERNAME}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
-
-      # Redis (BullMQ + ioredis)
       REDIS_HOST: redis
       REDIS_PORT: 6379
-
-      # Encryption
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-
-      # Google OAuth2
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL}
-
-      # Microsoft OAuth2
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-common}
-
-      # Cloudinary
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-
-      # Threat Intelligence
       ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY}
-
-      # Mailbox
       MAILBOX_STORAGE_LIMIT_BYTES: ${MAILBOX_STORAGE_LIMIT_BYTES:-1073741824}
-
-      # Admin seed
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@securemail.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-
-      # Frontend URL (for OAuth redirects)
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
-
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,13 +46,14 @@ services:
       - securemail_network
     volumes:
       - ./logs:/app/logs
+      - securemail_uploads:/app/uploads
 
   # ─── Prisma Migrate (runs once then exits) ───────────────────────
   migrate:
     build:
       context: ..
       dockerfile: SecureMail-Backend/Dockerfile
-      target: builder          # needs prisma CLI
+      target: builder
     container_name: securemail_migrate
     command: npx prisma migrate deploy
     environment:
@@ -110,7 +86,7 @@ services:
     networks:
       - securemail_network
 
-  # ─── Redis (BullMQ + ioredis cache) ─────────────────────────────
+  # ─── Redis ──────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: securemail_redis
@@ -132,12 +108,12 @@ services:
     networks:
       - securemail_network
 
-# ─── Volumes ──────────────────────────────────────────────────────
 volumes:
   postgres_data:
   redis_data:
+  securemail_uploads:
 
-# ─── Networks ─────────────────────────────────────────────────────
 networks:
   securemail_network:
     driver: bridge
+    name: securemail_network
