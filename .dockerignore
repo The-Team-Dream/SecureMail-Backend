@@ -1,5 +1,41 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
+
+# Environment files (never include secrets in image)
 .env
-.git
+.env.*
+!.env.example
+
+# Prisma migrations dev state (deploy handles prod)
+prisma/dev.db
+prisma/*.db-journal
+
+# Logs
 *.log
+logs
+
+# Git
+.git
+.gitignore
+.github
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+
+# Tests & coverage
+coverage
+.nyc_output
+test
+jest.setup.ts
+
+# IDE
+.vscode
+.idea
+
+# Misc
+README.md
+*.md

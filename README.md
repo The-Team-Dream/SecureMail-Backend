@@ -40,8 +40,8 @@ NestJS REST API for SecureMail: authentication, mailboxes, email operations, sec
 | `JWT_SECRET` | **Required** for JWT signing |
 | `FRONTEND_URL` | CORS origin (e.g. `http://localhost:3001`) |
 | `PUBLIC_API_URL` | Shown as server URL in OpenAPI (optional) |
-| `AI_AGENT_GRPC_URL` | AI gRPC address (e.g. `localhost:50051` or `ai:50051` in Docker) |
-| `MALWARE_ENGINE_GRPC_URL` | Optional malware gRPC service |
+| `AI_AGENT_GRPC_URL` | AI gRPC address (e.g. `localhost:50051` or `ai:50051`) |
+| `MALWARE_GRPC_URL` | Malware gRPC address (e.g. `localhost:50052` or `malware:50052`) |
 
 Copy from your team’s `.env.example` if present; for Docker stack see repo root `.env.docker.example`.
 

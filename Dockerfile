@@ -1,35 +1,58 @@
-# Build from monorepo root:
-#   docker build -f SecureMail-Backend/Dockerfile -t securemail-backend .
+# ─── Stage 1: Dependencies ────────────────────────────────────────
+FROM node:20-alpine AS deps
 
-FROM node:20-bookworm-slim AS builder
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
-COPY contracts ./contracts
-COPY SecureMail-Backend/package.json SecureMail-Backend/pnpm-lock.yaml ./
-COPY SecureMail-Backend/prisma ./prisma
-COPY SecureMail-Backend/scripts ./scripts
-COPY SecureMail-Backend/tsconfig.json SecureMail-Backend/nest-cli.json ./
-COPY SecureMail-Backend/src ./src
+# OpenSSL required by Prisma
+RUN apk add --no-cache openssl
 
-RUN pnpm install --no-frozen-lockfile
-RUN pnpm exec prisma generate
-ENV NODE_ENV=production
-RUN pnpm run build
+COPY package*.json ./
+RUN npm ci
 
-FROM node:20-bookworm-slim AS runner
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+# ─── Stage 2: Build ───────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
 WORKDIR /app
-ENV NODE_ENV=production
 
+RUN apk add --no-cache openssl
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Generate Prisma client before building
+RUN npx prisma generate
+
+RUN npm run build
+
+# ─── Stage 3: Production ──────────────────────────────────────────
+FROM node:20-alpine AS production
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+
+# Production dependencies only
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy Prisma schema + generated client
+COPY --from=builder /app/prisma        ./prisma
+COPY --from=builder /app/generated     ./generated
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# Copy built app
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/generated ./generated
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/contracts ./contracts
+
+# Copy proto-check scripts
+COPY --from=builder /app/scripts ./scripts
+
+# Non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser  -S nestjs -u 1001 -G nodejs && \
+    mkdir -p /app/logs && chown nestjs:nodejs /app/logs
+
+USER nestjs
 
 EXPOSE 3000
-CMD ["node", "dist/src/main.js"]
+
+CMD ["node", "dist/main"]
