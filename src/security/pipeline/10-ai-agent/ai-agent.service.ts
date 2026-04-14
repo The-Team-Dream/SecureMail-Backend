@@ -52,6 +52,7 @@ export class AiAgentService implements OnModuleInit {
 
     onModuleInit(): void {
         this.aiAgentClient = this.client.getService<AIAgentGrpcService>('AIAgentService');
+        this.logger.log('✅ AI Agent gRPC Service initialized and ready.');
     }
 
     /**
