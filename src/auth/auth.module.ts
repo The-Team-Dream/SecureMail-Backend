@@ -19,9 +19,12 @@ import { ConfigService } from '@nestjs/config';
         signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '7d') },
       }),
     }),
-    RedisModule.forRoot({
-      type: 'single',
-      url: 'redis://localhost:6379',
+    RedisModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'single',
+        url: `redis://${config.get('REDIS_HOST', 'localhost')}:${config.get('REDIS_PORT', '6379')}`,
+      }),
     }),
     PassportModule,
     PrismaModule,

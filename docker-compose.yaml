@@ -9,6 +9,8 @@ services:
       dockerfile: SecureMail-Backend/Dockerfile
       target: production
     container_name: securemail_backend
+    env_file:
+      - ./.env
     restart: unless-stopped
     ports:
       - '${APP_PORT:-3000}:3000'
@@ -55,6 +57,8 @@ services:
       dockerfile: SecureMail-Backend/Dockerfile
       target: builder
     container_name: securemail_migrate
+    env_file:
+      - ./.env
     command: npx prisma migrate deploy
     environment:
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-0000}@postgres:5432/${DB_NAME:-securemail}?schema=public
@@ -69,6 +73,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: securemail_postgres
+    env_file:
+      - ./.env
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -90,11 +96,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: securemail_redis
+    env_file:
+      - ./.env
     restart: unless-stopped
     command: >
       redis-server
       --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy noeviction
       --save 60 1
     ports:
       - '${REDIS_PORT:-6379}:6379'

@@ -10,18 +10,25 @@ export class AppController {
     constructor(private readonly appService: AppService) {}
 
     @Get()
-    @ApiOperation({ summary: 'API root / liveness' })
+    @ApiOperation({ summary: 'API root / liveness with full health check' })
     @ApiOkResponse({
-        description: 'Plain text greeting wrapped by global interceptor',
+        description: 'Health status of all connected services',
         schema: {
             example: {
                 success: true,
-                message: 'Request successful',
-                data: 'SecureMail API',
+                message: 'Health check completed',
+                data: {
+                    overall: 'healthy',
+                    database: 'healthy',
+                    redis: 'healthy',
+                    ai_agent: 'healthy',
+                    malware_scanner: 'healthy'
+                },
             },
         },
     })
-    getHello(): string {
-        return this.appService.getHello();
+    async getHello() {
+        const healthStatus = await this.appService.checkHealth();
+        return healthStatus;
     }
 }
