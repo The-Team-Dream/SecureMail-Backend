@@ -22,13 +22,15 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN apk add --no-cache openssl
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY pnpm-workspace.yaml ./
+COPY contracts ./contracts
+COPY SecureMail-Backend ./SecureMail-Backend
 
 # Run from backend directory to ensure prisma and build scripts find their relative paths
 WORKDIR /app/SecureMail-Backend
 RUN npx prisma generate
 RUN pnpm run build
-RUN cp -r dist/src/* dist/ && rm -rf dist/src
+RUN if [ -d "dist/src" ]; then cp -r dist/src/* dist/ && rm -rf dist/src; fi
 
 # ─── Stage 3: Production ──────────────────────────────────────────
 FROM node:20-alpine AS production
@@ -42,6 +44,9 @@ RUN apk add --no-cache openssl
 RUN addgroup -g 1001 -S nodejs && \
     adduser  -S nestjs -u 1001 -G nodejs
 
+# Copy original prisma folder for the schema (do this before install to avoid prisma install warnings)
+COPY --chown=nestjs:nodejs --from=builder /app/SecureMail-Backend/prisma ./prisma
+
 # Production dependencies only
 COPY --chown=nestjs:nodejs SecureMail-Backend/package.json SecureMail-Backend/pnpm-lock.yaml ./
 RUN pnpm install --prod --no-frozen-lockfile
@@ -50,10 +55,7 @@ RUN pnpm install --prod --no-frozen-lockfile
 COPY --chown=nestjs:nodejs --from=builder /app/SecureMail-Backend/dist ./dist
 
 # Ensure the compiled Prisma client is in the expected relative path (../generated from dist/)
-COPY --chown=nestjs:nodejs --from=builder /app/SecureMail-Backend/dist/generated /app/generated
-
-# Copy original prisma folder for the schema (Prisma might need it at root /app/prisma)
-COPY --chown=nestjs:nodejs --from=builder /app/SecureMail-Backend/prisma ./prisma
+COPY --chown=nestjs:nodejs --from=builder /app/SecureMail-Backend/generated /app/generated
 
 # Copy proto-check scripts
 COPY --chown=nestjs:nodejs --from=builder /app/SecureMail-Backend/scripts ./scripts
