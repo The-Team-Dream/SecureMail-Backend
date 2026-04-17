@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package aiagent;
+
+service AIAgentService {
+  rpc GenerateReport (EmailAnalysisRequest) returns (AnalysisReport);
+}
+
+message RuleHit {
+  string rule        = 1;
+  float  score       = 2;
+  string description = 3;
+}
+
+message EmailAnalysisRequest {
+  string email_id        = 1;
+  string subject         = 2;
+  string from_addr       = 3;
+  string from_name       = 4;
+  string body_text       = 5;
+
+  float  spam_score      = 6;
+  float  phishing_score  = 7;
+  bool   is_spam         = 8;
+  bool   is_phishing     = 9;
+  repeated RuleHit rule_hits = 10;
+
+  bool   has_attachment    = 11;
+  string malware_verdict   = 12;
+  float  malware_score     = 13;
+  string malware_severity  = 14;
+
+  int32  mailbox_id              = 15;
+  int32  previous_email_count    = 16;
+  string sender_typical_topic    = 17;
+}
+
+message AnalysisReport {
+  string email_id    = 1;
+  string verdict     = 2;
+  string severity    = 3;
+  float  confidence  = 4;
+  string explanation = 5;
+  string summary     = 6;
+  repeated string reply_suggestions = 7;
+  bool   is_campaign           = 8;
+  string campaign_description  = 9;
+  string priority        = 10;
+  string priority_reason = 11;
+  bool   behavioral_anomaly  = 12;
+  string anomaly_description = 13;
+  string recommendation = 14;
+}
