@@ -1,41 +1,43 @@
-# Dependencies
+# ── Version control ───────────────────────────────────────────────
+.git
+.gitignore
+.gitmodules
+
+# ── IDE / tooling ────────────────────────────────────────────────
+.vscode
+.turbo
+.cache
+
+# ── Build output (rebuilt inside container) ───────────────────────
+dist
+build
+
+# ── Dependencies (reinstalled inside container) ───────────────────
 node_modules
 
-# Build output
-dist
+# ── Prisma generated client (regenerated inside container) ────────
+generated
 
-# Environment files (never include secrets in image)
+# ── Test files ───────────────────────────────────────────────────
+test
+**/*.spec.ts
+**/*.e2e-spec.ts
+jest.setup.ts
+coverage
+
+# ── Logs ─────────────────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+
+# ── Env files (pass at runtime via --env-file or docker-compose) ──
 .env
 .env.*
 !.env.example
 
-# Prisma migrations dev state (deploy handles prod)
-prisma/dev.db
-prisma/*.db-journal
-
-# Logs
-*.log
-logs
-
-# Git
-.git
-.gitignore
-.github
-
-# Docker
-docker-compose*.yml
-Dockerfile*
-
-# Tests & coverage
-coverage
-.nyc_output
-test
-jest.setup.ts
-
-# IDE
-.vscode
-.idea
-
-# Misc
+# ── Misc ─────────────────────────────────────────────────────────
 README.md
+API-Docs.md
 *.md
+*.zip
+src.zip

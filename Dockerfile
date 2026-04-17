@@ -1,72 +1,85 @@
-# ─── Stage 1: Dependencies ────────────────────────────────────────
-FROM node:20-alpine AS deps
+# ─────────────────────────────────────────────────────────────────
+#  SecureMail – Backend  (NestJS + Prisma 7 + pnpm)
+#  Standalone: copy SecureMail-Backend/ anywhere and docker build .
+# ─────────────────────────────────────────────────────────────────
+
+# ── Stage 1: dependency installer ────────────────────────────────
+FROM node:22-alpine AS deps
+
+# pnpm via corepack (fastest – no extra layer)
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Enable corepack for pnpm support
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# OpenSSL required by Prisma
-RUN apk add --no-cache openssl
-
-# Standalone context
+# Copy manifests first – maximises layer-cache hits
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --no-frozen-lockfile
 
-# ─── Stage 2: Build ───────────────────────────────────────────────
-FROM node:20-alpine AS builder
+# Install ALL deps (including devDeps needed for build)
+RUN pnpm install --frozen-lockfile
+
+# ── Stage 2: builder ──────────────────────────────────────────────
+FROM node:22-alpine AS builder
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
-RUN apk add --no-cache openssl
-
+# Bring node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copy the standalone project
+# Copy the full source (excluding what's in .dockerignore)
 COPY . .
 
-# Generate prisma client and build app
-RUN npx prisma generate
-RUN pnpm run build
-RUN if [ -d "dist/src" ]; then cp -r dist/src/* dist/ && rm -rf dist/src; fi
+# Generate Prisma client
+# schema.prisma output = "../generated/prisma" is relative to prisma/
+# so the client lands at ./generated/prisma inside the service folder
+RUN npx prisma generate --schema=prisma/schema.prisma
 
-# ─── Stage 3: Production ──────────────────────────────────────────
-FROM node:20-alpine AS production
+# Compile TypeScript → dist/
+# nest-cli.json copies contracts/**/*.proto → dist/contracts/
+RUN pnpm run build
+
+# ── Stage 3: production runner ───────────────────────────────────
+FROM node:22-alpine AS runner
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Install OpenSSL (required by Prisma) + curl (health-check)
+RUN apk add --no-cache openssl curl
+
+# Non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
-RUN apk add --no-cache openssl
+# Copy only production deps
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod
 
-# Non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser  -S nestjs -u 1001 -G nodejs
+# Copy compiled application
+COPY --from=builder /app/dist ./dist
 
-# Copy original prisma folder for the schema (do this before install to avoid prisma install warnings)
-COPY --chown=nestjs:nodejs --from=builder /app/prisma ./prisma
+# Copy generated Prisma client (built into generated/prisma)
+COPY --from=builder /app/generated ./generated
 
-# Production dependencies only
-COPY --chown=nestjs:nodejs package.json pnpm-lock.yaml ./
-RUN pnpm install --prod --no-frozen-lockfile
+# Copy Prisma schema & migrations (needed for migrate deploy at startup)
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
-# Copy built app
-COPY --chown=nestjs:nodejs --from=builder /app/dist ./dist
+# Copy proto contracts that nest-cli already placed in dist/contracts
+# (already included in the dist copy above – nothing extra needed)
 
-# Ensure the compiled Prisma client is in the expected relative path
-COPY --chown=nestjs:nodejs --from=builder /app/generated ./generated
+# Nest.js looks for nest-cli.json at startup in some configurations
+COPY nest-cli.json ./
 
-# Copy proto-check scripts
-COPY --chown=nestjs:nodejs --from=builder /app/scripts ./scripts
-
-# Safely copy contracts if they exist locally
-COPY --chown=nestjs:nodejs --from=builder /app/contracts* ./contracts/
-
-# Create logs directory with correct permissions
-RUN mkdir -p /app/logs && chown nestjs:nodejs /app/logs
-
-USER nestjs
+RUN chown -R appuser:appgroup /app
+USER appuser
 
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+# Health check against the app's own /health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+# Run migrations then start the app
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=prisma/schema.prisma && node dist/main"]

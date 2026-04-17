@@ -21,7 +21,7 @@ import { AdminAuditLogsQueryDto } from '../dto/audit-logs-query.dto';
 @Roles(Role.ADMIN)
 @ApiBearerAuth()
 export class AdminAuditController {
-  constructor(private readonly service: AdminAuditService) {}
+  constructor(private readonly service: AdminAuditService) { }
 
   @Get()
   @ApiOperation({ summary: 'Paginated audit logs with filters' })
