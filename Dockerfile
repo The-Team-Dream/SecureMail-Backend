@@ -73,7 +73,8 @@ COPY --chown=nestjs:nodejs docker-entrypoint.sh ./
 COPY --from=builder --chown=nestjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 
 # Make entrypoint executable
-RUN chmod +x docker-entrypoint.sh
+# Fix line endings and set execution permissions for the entrypoint
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 
 USER nestjs
 
