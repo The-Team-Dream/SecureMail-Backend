@@ -5,8 +5,8 @@ services:
   # ─── NestJS App ─────────────────────────────────────────────────
   backend:
     build:
-      context: ..
-      dockerfile: SecureMail-Backend/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       target: production
     container_name: securemail_backend
     env_file:
@@ -53,8 +53,8 @@ services:
   # ─── Prisma Migrate (runs once then exits) ───────────────────────
   migrate:
     build:
-      context: ..
-      dockerfile: SecureMail-Backend/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       target: builder
     container_name: securemail_migrate
     env_file:
