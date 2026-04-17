@@ -23,7 +23,7 @@ import { OutlookProvider }          from './providers/outlook.provider';
 import { ImapProvider }             from './providers/imap.provider';
 import { MailboxesService }         from './mailboxes.service';
 import { SecurityService, SecurityPipelineInput } from '../security/security.service';
-import { EmailProviders, FolderType, SyncStatus, NotificationType } from 'generated/prisma/enums';
+import { EmailProviders, FolderType, SyncStatus, NotificationType } from '@prisma/client';
 import { google }                   from 'googleapis';
 
 export const EMAIL_SYNC_QUEUE = 'email-sync';

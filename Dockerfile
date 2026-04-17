@@ -39,8 +39,14 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml ./
+# Copy Prisma schema for generation
+COPY prisma ./prisma
+# Use hoisted node-linker to avoid symlink issues in multi-stage builds
+RUN pnpm config set node-linker hoisted
 # Install only production dependencies
 RUN pnpm install --prod --frozen-lockfile
+# Generate Prisma client for production node_modules
+RUN npx prisma generate
 
 # STAGE 4: Final minimal runtime image
 FROM node:22-alpine AS runtime
@@ -57,13 +63,14 @@ RUN adduser --system --uid 1001 nestjs
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 # Copy the production node_modules
 COPY --from=runtime-deps --chown=nestjs:nodejs /app/node_modules ./node_modules
-# Copy the generated Prisma client
-COPY --from=builder --chown=nestjs:nodejs /app/generated ./generated
 # Copy Prisma schema and migrations for 'migrate deploy'
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
-# Copy package.json and entrypoint
+# Copy contracts (gRPC protos)
+COPY --from=builder --chown=nestjs:nodejs /app/contracts ./contracts
+# Copy package.json, entrypoint, and Prisma config
 COPY --chown=nestjs:nodejs package.json ./
 COPY --chown=nestjs:nodejs docker-entrypoint.sh ./
+COPY --from=builder --chown=nestjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 
 # Make entrypoint executable
 RUN chmod +x docker-entrypoint.sh

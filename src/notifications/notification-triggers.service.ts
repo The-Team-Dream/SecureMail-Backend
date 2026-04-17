@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { NotificationsService } from './notifications.service';
-import { NotificationType } from 'generated/prisma/enums';
+import { NotificationType } from '@prisma/client';
 
 @Injectable()
 export class NotificationTriggersService {

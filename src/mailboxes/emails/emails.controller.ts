@@ -48,7 +48,7 @@ import { ReclassifyEmailDto } from './dto/reclassify-email.dto';
 import { SendEmailDto } from './dto/send-email.dto';
 import { ReplyEmailDto } from './dto/reply-email.dto';
 import { ForwardEmailDto } from './dto/forward-email.dto';
-import { FolderType } from 'generated/prisma/enums';
+import { FolderType } from '@prisma/client';
 import { EmailSendService } from './email-send.service';
 import { StoredAttachment } from './attachment-storage.service';
 

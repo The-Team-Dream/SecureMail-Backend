@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { FolderType } from 'generated/prisma/enums';
+import { FolderType } from '@prisma/client';
 
 @Injectable()
 export class AnalyticsService {

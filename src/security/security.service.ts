@@ -14,7 +14,7 @@ import {
     failedIntegrationPayload,
 } from './pipeline/10-ai-agent/ai-agent.mapping';
 import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationType, FolderType } from 'generated/prisma/enums';
+import { NotificationType, FolderType } from '@prisma/client';
 
 import { AuthenticationService } from './pipeline/2-authentication/authentication.service';
 import { ReputationService } from './pipeline/3-reputation/reputation.service';

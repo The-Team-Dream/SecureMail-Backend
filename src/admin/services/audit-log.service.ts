@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
-import { AuditTargetType } from 'generated/prisma/enums';
+import { AuditTargetType } from '@prisma/client';
 
 export interface CreateAuditLogInput {
   adminId: number;

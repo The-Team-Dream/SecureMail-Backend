@@ -1,6 +1,6 @@
 import { IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { ThemeMode } from 'generated/prisma/client';
+import { ThemeMode } from '@prisma/client';
 
 export class ThemeModeDto {
   @ApiProperty({

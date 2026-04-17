@@ -1,6 +1,6 @@
 import { MailerService } from '@nestjs-modules/mailer';
 import { Injectable } from '@nestjs/common';
-import { User } from 'generated/prisma/client';
+import { User } from '@prisma/client';
 import { welcomeTemplate } from './templates/welcome';
 import { otpTemplate } from './templates/otp';
 import { resetPasswordTemplate } from './templates/resetpassword';

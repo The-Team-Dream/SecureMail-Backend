@@ -15,7 +15,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { NotificationsService } from '../../../notifications/notifications.service';
-import { FolderType, NotificationType } from 'generated/prisma/enums';
+import { FolderType, NotificationType } from '@prisma/client';
 
 // ─── Rescan request ───────────────────────────────────────────────────────────
 export interface RescanRequest {

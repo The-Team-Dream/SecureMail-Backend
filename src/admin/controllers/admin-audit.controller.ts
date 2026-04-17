@@ -11,7 +11,7 @@ import { AdminAuditService } from '../services/admin-audit.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from 'generated/prisma/enums';
+import { Role } from '@prisma/client';
 import { AdminAuditLogsQueryDto } from '../dto/audit-logs-query.dto';
 
 @ApiTags('admin/audit-logs')

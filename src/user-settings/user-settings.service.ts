@@ -6,12 +6,11 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { ThemeMode } from 'generated/prisma/client';
+import { ThemeMode, NotificationType } from '@prisma/client';
 import { EditProfileDto } from './dto/edit-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { StorageService } from './storage.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationType } from 'generated/prisma/enums';
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import * as QRCode from 'qrcode';
 

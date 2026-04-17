@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma.service';
-import { EmailProviders } from 'generated/prisma/enums';
-import { FolderType } from 'generated/prisma/enums';
+import { EmailProviders } from '@prisma/client';
+import { FolderType } from '@prisma/client';
 
 export const EMAIL_SYNC_QUEUE = 'email-sync';
 

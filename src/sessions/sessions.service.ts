@@ -7,7 +7,7 @@ import { PrismaService } from 'src/prisma.service';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationType } from 'generated/prisma/enums';
+import { NotificationType } from '@prisma/client';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const UAParser = require('ua-parser-js') as new (ua?: string) => { getResult: () => { os?: { name?: string }; browser?: { name?: string } } };
 

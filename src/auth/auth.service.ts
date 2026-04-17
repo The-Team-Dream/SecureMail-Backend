@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { NodeMailerService } from 'src/node-mailer/node-mailer.service';
-import { User } from 'generated/prisma/client';
+import { User } from '@prisma/client';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import Redis from 'ioredis';

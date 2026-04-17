@@ -5,7 +5,7 @@ import { AdminDashboardService } from '../services/admin-dashboard.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from 'generated/prisma/enums';
+import { Role } from '@prisma/client';
 
 @ApiTags('admin/dashboard')
 @ApiStandardErrorResponses()

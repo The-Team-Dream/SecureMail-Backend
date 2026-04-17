@@ -13,8 +13,8 @@ import { ConnectGmailDto } from './dto/connect-gmail.dto';
 import { ConnectOutlookDto } from './dto/connect-outlook.dto';
 import { ConnectImapDto } from './dto/connect-imap.dto';
 import { UpdateMailboxDto } from './dto/update-mailbox.dto';
-import { EmailProviders } from 'generated/prisma/enums';
-import { ImapAuthType, SmtpAuthType } from 'generated/prisma/enums';
+import { EmailProviders } from '@prisma/client';
+import { ImapAuthType, SmtpAuthType } from '@prisma/client';
 
 @Injectable()
 export class MailboxesService {

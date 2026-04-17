@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
-import { FolderType } from 'generated/prisma/enums';
+import { FolderType } from '@prisma/client';
 import { ReportType } from './dto/report-email.dto';
 import { TargetFolderType } from './dto/reclassify-email.dto';
 

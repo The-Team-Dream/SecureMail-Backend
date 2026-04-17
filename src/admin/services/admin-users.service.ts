@@ -4,9 +4,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
-import { Role } from 'generated/prisma/enums';
+import { Role } from '@prisma/client';
 import { AuditLogService } from './audit-log.service';
-import { AuditTargetType } from 'generated/prisma/enums';
+import { AuditTargetType } from '@prisma/client';
 import { SessionsService } from '../../sessions/sessions.service';
 
 @Injectable()

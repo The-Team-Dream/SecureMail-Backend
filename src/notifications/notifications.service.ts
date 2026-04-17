@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { NotificationType } from 'generated/prisma/enums';
+import { NotificationType } from '@prisma/client';
 import { NotificationsGateway } from './notifications.gateway';
 
 export interface CreateNotificationInput {

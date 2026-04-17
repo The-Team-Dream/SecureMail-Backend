@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsArray, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { NotificationType } from 'generated/prisma/enums';
+import { NotificationType } from '@prisma/client';
 
 export class BroadcastNotificationDto {
   @ApiProperty()

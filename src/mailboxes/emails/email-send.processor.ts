@@ -12,8 +12,8 @@ import {
   EMAIL_SEND_QUEUE,
   SendJobData,
 } from './email-send.service';
-import { EmailProviders } from 'generated/prisma/enums';
-import { FolderType } from 'generated/prisma/enums';
+import { EmailProviders } from '@prisma/client';
+import { FolderType } from '@prisma/client';
 import { google } from 'googleapis';
 
 @Processor(EMAIL_SEND_QUEUE)

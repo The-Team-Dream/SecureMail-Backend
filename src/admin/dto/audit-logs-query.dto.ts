@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { AdminPaginatedDto } from './common.dto';
-import { AuditTargetType } from 'generated/prisma/enums';
+import { AuditTargetType } from '@prisma/client';
 
 export class AdminAuditLogsQueryDto extends AdminPaginatedDto {
   @ApiPropertyOptional({ description: 'Filter by action' })

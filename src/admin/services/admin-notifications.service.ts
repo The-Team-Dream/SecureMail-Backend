@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { NotificationType } from 'generated/prisma/enums';
+import { NotificationType } from '@prisma/client';
 import { AuditLogService } from './audit-log.service';
-import { AuditTargetType } from 'generated/prisma/enums';
+import { AuditTargetType } from '@prisma/client';
 
 @Injectable()
 export class AdminNotificationsService {

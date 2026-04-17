@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { AuditLogService } from './audit-log.service';
-import { AuditTargetType } from 'generated/prisma/enums';
+import { AuditTargetType } from '@prisma/client';
 
 @Injectable()
 export class AdminMailboxesService {

@@ -21,7 +21,7 @@ import { AdminNotificationsService } from '../services/admin-notifications.servi
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from 'generated/prisma/enums';
+import { Role } from '@prisma/client';
 import { BroadcastNotificationDto } from '../dto/broadcast-notification.dto';
 import { AdminPaginatedDto } from '../dto/common.dto';
 
