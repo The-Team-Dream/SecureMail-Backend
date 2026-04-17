@@ -1,85 +1,78 @@
-# ─────────────────────────────────────────────────────────────────
-#  SecureMail – Backend  (NestJS + Prisma 7 + pnpm)
-#  Standalone: copy SecureMail-Backend/ anywhere and docker build .
-# ─────────────────────────────────────────────────────────────────
-
-# ── Stage 1: dependency installer ────────────────────────────────
-FROM node:22-alpine AS deps
-
-# pnpm via corepack (fastest – no extra layer)
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
+# STAGE 1: Install all dependencies (including devDependencies for building)
+FROM node:22-alpine AS build-deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy manifests first – maximises layer-cache hits
+# Enable pnpm
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+# Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Install ALL deps (including devDeps needed for build)
+# Install all dependencies
 RUN pnpm install --frozen-lockfile
 
-# ── Stage 2: builder ──────────────────────────────────────────────
+# STAGE 2: Build the application
 FROM node:22-alpine AS builder
-
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 WORKDIR /app
 
-# Bring node_modules from deps stage
-COPY --from=deps /app/node_modules ./node_modules
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
 
-# Copy the full source (excluding what's in .dockerignore)
+# Copy node_modules from build-deps and source code
+COPY --from=build-deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma client
-# schema.prisma output = "../generated/prisma" is relative to prisma/
-# so the client lands at ./generated/prisma inside the service folder
-RUN npx prisma generate --schema=prisma/schema.prisma
+# Generate Prisma client and Build NestJS
+RUN npx prisma generate
+RUN pnpm build
 
-# Compile TypeScript → dist/
-# nest-cli.json copies contracts/**/*.proto → dist/contracts/
-RUN pnpm run build
-
-# ── Stage 3: production runner ───────────────────────────────────
-FROM node:22-alpine AS runner
-
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Install OpenSSL (required by Prisma) + curl (health-check)
-RUN apk add --no-cache openssl curl
-
-# Non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
+# STAGE 3: Install ONLY production dependencies
+FROM node:22-alpine AS runtime-deps
 WORKDIR /app
 
-# Copy only production deps
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+# Install only production dependencies
+RUN pnpm install --prod --frozen-lockfile
 
-# Copy compiled application
-COPY --from=builder /app/dist ./dist
+# STAGE 4: Final minimal runtime image
+FROM node:22-alpine AS runtime
+WORKDIR /app
 
-# Copy generated Prisma client (built into generated/prisma)
-COPY --from=builder /app/generated ./generated
+# Install security updates and libc6-compat for Prisma
+RUN apk update && apk upgrade && apk add --no-cache libc6-compat
 
-# Copy Prisma schema & migrations (needed for migrate deploy at startup)
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+# Create a non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nestjs
 
-# Copy proto contracts that nest-cli already placed in dist/contracts
-# (already included in the dist copy above – nothing extra needed)
+# Copy the compiled application
+COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
+# Copy the production node_modules
+COPY --from=runtime-deps --chown=nestjs:nodejs /app/node_modules ./node_modules
+# Copy the generated Prisma client
+COPY --from=builder --chown=nestjs:nodejs /app/generated ./generated
+# Copy Prisma schema and migrations for 'migrate deploy'
+COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
+# Copy package.json and entrypoint
+COPY --chown=nestjs:nodejs package.json ./
+COPY --chown=nestjs:nodejs docker-entrypoint.sh ./
 
-# Nest.js looks for nest-cli.json at startup in some configurations
-COPY nest-cli.json ./
+# Make entrypoint executable
+RUN chmod +x docker-entrypoint.sh
 
-RUN chown -R appuser:appgroup /app
-USER appuser
+USER nestjs
 
-EXPOSE 3000
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "fetch('http://localhost:3000/health').then(r => r.status === 200 ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
-# Health check against the app's own /health endpoint
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
-
-# Run migrations then start the app
-CMD ["sh", "-c", "npx prisma migrate deploy --schema=prisma/schema.prisma && node dist/main"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["node", "dist/main"]
