@@ -50,14 +50,18 @@ export class AppService {
     }
 
     // 3. Check AI Agent (TCP)
-    const aiUrl = this.config.get('AI_AGENT_GRPC_URL', 'localhost:50051');
-    status.ai_agent = await this.checkTcpPort(aiUrl);
-    if (status.ai_agent === 'down') status.overall = 'unhealthy';
+    const aiUrl = this.config.get('AI_PORT_URL', this.config.get('AI_PORT', '127.0.0.1:50051'));
+    // If AI_PORT is just a number, we might need to handle it. 
+    // But for now let's assume it's host:port or just look for AI_AGENT_GRPC_URL first.
+    const finalAiUrl = this.config.get('AI_AGENT_GRPC_URL') || (aiUrl.includes(':') ? aiUrl : `127.0.0.1:${aiUrl}`);
+    status.ai_agent = await this.checkTcpPort(finalAiUrl);
+    if (status.ai_agent !== 'healthy') status.overall = 'unhealthy';
 
     // 4. Check Malware Scanner (TCP)
-    const malwareUrl = this.config.get('MALWARE_GRPC_URL', 'localhost:50052');
-    status.malware_scanner = await this.checkTcpPort(malwareUrl);
-    if (status.malware_scanner === 'down') status.overall = 'unhealthy';
+    const malwareUrl = this.config.get('MALWARE_PORT_URL', this.config.get('MALWARE_PORT', '127.0.0.1:50052'));
+    const finalMalwareUrl = this.config.get('MALWARE_GRPC_URL') || (malwareUrl.includes(':') ? malwareUrl : `127.0.0.1:${malwareUrl}`);
+    status.malware_scanner = await this.checkTcpPort(finalMalwareUrl);
+    if (status.malware_scanner !== 'healthy') status.overall = 'unhealthy';
 
     return status;
   }
@@ -66,19 +70,25 @@ export class AppService {
     return new Promise((resolve) => {
       const [host, port] = url.split(':');
       const socket = new net.Socket();
-      socket.setTimeout(2000);
+      socket.setTimeout(3000); // 3s timeout for stability
+
       socket.once('connect', () => {
         socket.destroy();
         resolve('healthy');
       });
+
       socket.once('timeout', () => {
+        console.error(`Health Check: Port ${port} on ${host} timed out`);
         socket.destroy();
         resolve('timeout');
       });
-      socket.once('error', () => {
+
+      socket.once('error', (err) => {
+        console.error(`Health Check: Port ${port} on ${host} failed: ${err.message}`);
         socket.destroy();
         resolve('down');
       });
+
       socket.connect(parseInt(port, 10), host);
     });
   }
