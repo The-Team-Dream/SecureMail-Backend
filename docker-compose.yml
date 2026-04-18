@@ -1,0 +1,82 @@
+# ════════════════════════════════════════════════════════════════════════════
+# SecureMail-Backend — STANDALONE docker-compose
+#
+# Starts: Backend (NestJS) + PostgreSQL + Redis
+# Does NOT start: AI or Malware gRPC services
+# The backend handles their absence gracefully via graceful degradation:
+#   - AiAgentService returns { ok: false } when gRPC is unreachable
+#   - MalwareService returns { ok: false } when gRPC is unreachable
+#   - Security pipeline continues without those stages
+#
+# Usage: cd SecureMail-Backend && docker compose up --build
+# ════════════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── NestJS Backend ───────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: securemail-backend
+    env_file: .env.standalone
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    volumes:
+      # Persist uploaded files between restarts
+      - uploads_data:/app/uploads
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+        reservations:
+          memory: 256m
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: securemail-postgres
+    environment:
+      POSTGRES_PASSWORD: "0000"
+      POSTGRES_DB: securemail
+      POSTGRES_USER: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "securemail"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: securemail-redis
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:

@@ -8,6 +8,7 @@ generator client {
   provider     = "prisma-client-js"
 }
 
+//Your Prisma schema file contains a datasource URL, which is not supported in Prisma 7. If you intend to use Prisma 6, press the button below to pin the current workspace to Prisma 6. If you want to continue using Prisma 7, you can ignore this message.
 datasource db {
   provider = "postgresql"
 }

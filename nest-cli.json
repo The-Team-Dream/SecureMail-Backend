@@ -5,7 +5,7 @@
   "compilerOptions": {
     "assets": [
       {
-        "include": "../contracts/**/*.proto",
+        "include": "contracts/**/*.proto",
         "outDir": "dist/contracts",
         "watchAssets": true
       }

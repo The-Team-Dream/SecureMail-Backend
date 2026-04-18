@@ -1,0 +1,48 @@
+# Node dependencies and artifacts
+node_modules/
+dist/
+.turbo/
+
+# Prisma generated client (generated during Docker build)
+generated/
+
+# Logs
+logs/
+*.log
+
+# Environment files (injected by docker compose)
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+.gitmodules
+
+# Documentation (not needed in image)
+*.md
+API-Docs.md
+QUICKSTART.md
+securemail_backend_presentation.html
+
+# Test files
+test/
+*.spec.ts
+jest.setup.ts
+
+# Editor / OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# TypeScript source maps (already compiled)
+*.tsbuildinfo
+
+# Classification training data
+src/classification.zip
+src/security.zip
+
+# Upload storage (mounted as volume in production)
+uploads/
