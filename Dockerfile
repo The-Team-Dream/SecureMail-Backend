@@ -70,7 +70,6 @@ COPY --from=builder --chown=nestjs:nodejs /app/contracts ./contracts
 # Copy package.json, entrypoint, and Prisma config
 COPY --chown=nestjs:nodejs package.json ./
 COPY --chown=nestjs:nodejs docker-entrypoint.sh ./
-COPY --from=builder --chown=nestjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 
 # Make entrypoint executable
 # Fix line endings and set execution permissions for the entrypoint
