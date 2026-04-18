@@ -36,9 +36,6 @@ Thumbs.db
 # VS Code
 # =========================
 .vscode/
-!.vscode/settings.json
-!.vscode/extensions.json
-!.vscode/launch.json
 
 # =========================
 # IDEs
