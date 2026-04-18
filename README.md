@@ -1,6 +1,39 @@
 # SecureMail-Backend 🛡️
 
-SecureMail-Backend is a high-performance, containerized TypeScript microservice built with NestJS, powering the security and mailbox management infrastructure for SecureMail.
+## 🛡️ Deep Analysis: The Security Pipeline
+
+SecureMail-Backend is the orchestration heart of the ecosystem. It implements a **10-Stage Security Pipeline** that processes every email from ingestion to a final human-readable report.
+
+### ⚙️ Architecture Overview
+The backend is a high-concurrency NestJS application that leverages **Prisma** for data persistence and **Bull (Redis)** for background orchestration.
+
+```mermaid
+graph LR
+    A[Ingestion: IMAP/API] --> B[1. Email Parser]
+    B --> C[2. Auth & SPF/DKIM]
+    C --> D[3. Global Reputation]
+    D --> E[4. Behavioral Map]
+    E --> F[5. URL Sandboxing]
+    F --> G[6. Malware Scanner]
+    G --> H[7. Heuristic Scoring]
+    H --> I[8. AI Reasoning Agent]
+    I --> J[9. Decision Matrix]
+    J --> K[Final Verdict & DB]
+```
+
+### 🔍 Core Security Stages
+1.  **Email Authentication**: Validates SPF, DKIM, and DMARC to prevent spoofing.
+2.  **Intel Reputation**: Checks sender IP and Domain against multiple threat intelligence feeds (e.g., AbuseIPDB).
+3.  **Behavioral Engine**: Tracks sender reputation and typical communication patterns for each mailbox.
+4.  **Static Rule Engine**: Over 28 targeted rules ranging from "Homoglyph Attacks" to "Credit Card Data Theft".
+5.  **Microservice Delegation**: Offloads Heavy Scanning (Go) and LLM Reasoning (Python) to specialized services via gRPC.
+
+### 🛠️ Infrastructure
+- **Database**: PostgreSQL (via Prisma ORM).
+- **Caching/Queuing**: Redis (BullMQ) for asynchronous processing.
+- **Microservices**: Orchestrates AI and Malware agents via gRPC.
+
+---
 
 ## 🚀 Quick Start
 
