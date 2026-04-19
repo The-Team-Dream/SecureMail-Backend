@@ -52,7 +52,13 @@ cp .env.example .env
 # For Docker specifically
 cp .env.example .env.docker
 ```
+### Quick Start
 
+**Windows:**
+setup.bat
+
+**Mac/Linux:**
+./setup.sh
 ---
 
 ## 🐳 Option 1: Running with Docker (Recommended)
