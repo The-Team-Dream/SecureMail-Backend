@@ -101,4 +101,5 @@ docker-compose.override.yml
 # =========================
 # Turborepo
 # =========================
-.turbo/
+.turbo/.env.standalone
+.env*
