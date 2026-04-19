@@ -6,17 +6,17 @@
 
 ## 📋 Table of Contents
 
-- [How the Security Pipeline Works](#-how-the-security-pipeline-works)
-- [Quick Start — Run with One Command](#-quick-start----run-with-one-command)
-- [What Does the Setup Script Do?](#-what-does-the-setup-script-do)
-- [Getting Your Secrets](#-getting-your-secrets)
-- [Local Development (No Docker)](#-local-development-no-docker)
-- [Project Structure](#-project-structure)
-- [Troubleshooting](#-troubleshooting)
+- [How the Security Pipeline Works](#how-the-security-pipeline-works)
+- [Quick Start - Run with One Command](#quick-start-run-with-one-command)
+- [What Does the Setup Script Do?](#what-does-the-setup-script-do)
+- [Getting Your Secrets](#getting-your-secrets)
+- [Local Development (No Docker)](#local-development-no-docker)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## 🔍 How the Security Pipeline Works
+## 🔍How the Security Pipeline Works
 
 Every incoming email passes through **10 sequential stages** before a final verdict is issued:
 
@@ -51,7 +51,7 @@ graph LR
 
 ---
 
-## 🚀 Quick Start — Run with One Command
+## 🚀Quick Start - Run with One Command
 
 ### Prerequisites
 
@@ -110,7 +110,7 @@ The setup automatically creates two ready-to-use accounts — no registration ne
 
 ---
 
-## 🔧 What Does the Setup Script Do?
+## 🔧What Does the Setup Script Do?
 
 The script handles everything for you automatically — here's exactly what happens step by step:
 
@@ -262,7 +262,7 @@ ENCRYPTION_KEY=your-32-character-minimum-key-here!!
 
 ---
 
-## 🛠️ Local Development (No Docker)
+## 🛠️Local Development (No Docker)
 
 Use this method if you want to code and debug actively.
 
@@ -296,7 +296,7 @@ pnpm run start:dev
 
 ---
 
-## 📁 Project Structure
+## 📁Project Structure
 
 ```
 SecureMail-Backend/
@@ -343,7 +343,7 @@ SecureMail-Backend/
 
 ---
 
-## ⚠️ Troubleshooting
+## ⚠️Troubleshooting
 
 ### Backend fails to start — `P1000: Authentication failed`
 
