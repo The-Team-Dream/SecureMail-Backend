@@ -99,6 +99,15 @@ Once the script finishes, your backend is live at:
 | **API Docs** | http://localhost:3000/api/docs |
 | **Health Check** | http://localhost:3000/health |
 
+The setup automatically creates two ready-to-use accounts — no registration needed:
+
+| Role | Email | Password |
+|---|---|---|
+| 👤 **Demo User** | `demo@securemail.local` | `Demo123!` |
+| 🛡️ **Admin** | `admin@securemail.local` | `Admin123!` |
+
+> **Tip:** Override these credentials by setting `DEMO_EMAIL`, `DEMO_PASSWORD`, `ADMIN_EMAIL`, or `ADMIN_PASSWORD` in your `.env.standalone` before running the script.
+
 ---
 
 ## 🔧 What Does the Setup Script Do?
@@ -121,22 +130,22 @@ The script handles everything for you automatically — here's exactly what happ
 │     └── Type anything → uses what you typed             │
 │                                                         │
 │  ④ Writes the password into .env.standalone             │
-│     └── docker-compose.yaml reads it from there         │
-│     └── No duplicate values — single source of truth    │
+│     └── and docker-compose.yml directly                 │
+│     └── Both stay in sync automatically                 │
 │                                                         │
 │  ⑤ Reminds you about optional secrets                   │
 │     └── Shows which features need extra config          │
 │     └── Links you to this README for instructions       │
 │                                                         │
-│  ⑥ Starts Docker Compose                               │
+│  ⑥ Starts Docker Compose                                │
 │     └── Builds the backend image                        │
 │     └── Starts PostgreSQL + Redis + Backend             │
 │                                                         │
-│  ⑦ Waits for the backend to be ready                   │
+│  ⑦ Waits for the backend to be ready                    │
 │     └── Watches for Prisma migrations to complete       │
 │     └── Times out after ~60s with a helpful error       │
 │                                                         │
-│  ⑧ Prints the final URLs                               │
+│  ⑧ Prints the final URLs                                │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -292,17 +301,39 @@ pnpm run start:dev
 ```
 SecureMail-Backend/
 ├── src/                        # Application source code
-│   ├── modules/                # Feature modules (auth, mail, users...)
+│   ├── auth/                   # Authentication (JWT, Google OAuth, 2FA)
+│   ├── user/                   # User management
+│   ├── mailboxes/              # Mailbox & email handling
+│   ├── security/               # Security pipeline logic
+│   ├── analytics/              # Usage analytics
+│   ├── notifications/          # Push & email notifications
+│   ├── node-mailer/            # SMTP email sending
+│   ├── sessions/               # Session management
+│   ├── user-settings/          # User preferences
+│   ├── admin/                  # Admin panel endpoints
+│   ├── config/                 # App configuration modules
 │   ├── common/                 # Shared utilities, guards, interceptors
+│   ├── proto/                  # Generated gRPC stubs
+│   ├── prisma.module.ts        # Prisma module
+│   ├── prisma.service.ts       # Prisma service
+│   ├── app.module.ts           # Root application module
+│   ├── app.controller.ts       # Root controller
+│   ├── app.service.ts          # Root service
 │   └── main.ts                 # Application entry point
 ├── prisma/                     # Database schema and migrations
 │   ├── schema.prisma           # Data models
+│   ├── seed.ts                 # Database seeder
 │   └── migrations/             # Migration history
 ├── contracts/                  # gRPC proto definitions
-│   ├── ai/                     # AI agent contract
-│   └── malware/                # Malware scanner contract
-├── docker-compose.yaml         # Standalone stack (Backend + DB + Redis)
+│   ├── ai-agent.proto          # AI agent contract
+│   └── malware.proto           # Malware scanner contract
+├── scripts/                    # Utility scripts
+│   └── assert-contracts.cjs    # Validates proto contracts
+├── docker-compose.yml          # Standalone stack (Backend + DB + Redis)
 ├── Dockerfile                  # Multi-stage production image
+├── prisma.config.ts            # Prisma configuration
+├── Makefile                    # Common dev shortcuts
+├── API-Docs.md                 # REST API documentation
 ├── .env.standalone.example     # Environment template → copy to .env.standalone
 ├── .env.docker.example         # Environment template for full-stack mode
 ├── .env.example                # Environment template for local development

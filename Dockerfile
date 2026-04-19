@@ -77,5 +77,5 @@ USER nestuser
 
 EXPOSE 3000
 
-# Run database migration then start the server
-CMD sh -c "npx prisma migrate deploy && node dist/main"
+# Run database migrations, seed demo data, then start the server
+CMD sh -c "npx prisma migrate deploy && npx prisma db seed && node dist/main"
