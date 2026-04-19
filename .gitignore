@@ -16,10 +16,15 @@ build/
 # =========================
 # Environment variables
 # =========================
+# Ignore real env files (contain secrets)
 .env
-.env.*
+.env.docker
+.env.standalone
+
+# Allow example templates
 !.env.example
-!.env.standalone
+!.env.docker.example
+!.env.standalone.example
 
 # =========================
 # Logs
@@ -101,5 +106,4 @@ docker-compose.override.yml
 # =========================
 # Turborepo
 # =========================
-.turbo/.env.standalone
-.env*
+.turbo/
