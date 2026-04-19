@@ -152,7 +152,7 @@ The script handles everything for you automatically — here's exactly what happ
 
 ---
 
-## 🔑 Getting Your Secrets
+## 🔑Getting Your Secrets
 
 After the script runs, open `.env.standalone` and fill in the optional secrets below. Each section explains exactly where to get the value.
 
