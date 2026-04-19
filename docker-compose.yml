@@ -8,7 +8,7 @@
 #   - MalwareService returns { ok: false } when gRPC is unreachable
 #   - Security pipeline continues without those stages
 #
-# Usage: cd SecureMail-Backend && docker compose up --build
+# Usage: cd SecureMail-Backend && ./setup.sh (or setup.bat on Windows)
 # ════════════════════════════════════════════════════════════════════════════
 
 services:
@@ -19,9 +19,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: securemail-backend
-    env_file:
-      - path: .env.standalone
-        required: true
+    env_file: .env.standalone
     ports:
       - "3000:3000"
     depends_on:
@@ -37,7 +35,6 @@ services:
       start_period: 60s
     restart: unless-stopped
     volumes:
-      # Persist uploaded files between restarts
       - uploads_data:/app/uploads
     deploy:
       resources:
@@ -50,8 +47,9 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: securemail-postgres
+    env_file: .env.standalone
     environment:
-      POSTGRES_PASSWORD: "0000"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"   # ← من .env.standalone
       POSTGRES_DB: securemail
       POSTGRES_USER: postgres
     volumes:

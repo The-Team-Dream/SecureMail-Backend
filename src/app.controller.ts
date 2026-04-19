@@ -9,8 +9,8 @@ import { ApiStandardErrorResponses } from './common/swagger';
 export class AppController {
     constructor(private readonly appService: AppService) {}
 
-    @Get()
-    @ApiOperation({ summary: 'API root / liveness with full health check' })
+    @Get('health')
+    @ApiOperation({ summary: 'API /health liveness with full health check' })
     @ApiOkResponse({
         description: 'Health status of all connected services',
         schema: {
