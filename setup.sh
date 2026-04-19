@@ -53,6 +53,8 @@ echo ""
 
 # ── 4. Write password into .env.standalone ──────────────────────
 sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${db_pass}/" .env.standalone
+sed -i "s|postgresql://postgres:.*@postgres|postgresql://postgres:${db_pass}@postgres|" .env.standalone
+sed -i "s/POSTGRES_PASSWORD: \".*\"/POSTGRES_PASSWORD: \"${db_pass}\"/" docker-compose.yml
 echo "✅ Password written to .env.standalone"
 echo ""
 

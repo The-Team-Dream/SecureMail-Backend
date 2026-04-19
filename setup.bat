@@ -58,6 +58,10 @@ echo.
 :: ── 4. Write password into .env.standalone ─────────────────────
 :: Use PowerShell to do the sed-equivalent replacement
 powershell -Command "(Get-Content .env.standalone) -replace '^POSTGRES_PASSWORD=.*', 'POSTGRES_PASSWORD=%db_pass%' | Set-Content .env.standalone"
+powershell -Command "(Get-Content .env.standalone) -replace 'postgresql://postgres:.*@postgres', 'postgresql://postgres:%db_pass%@postgres' | Set-Content .env.standalone"
+powershell -Command "(Get-Content docker-compose.yml) -replace 'POSTGRES_PASSWORD: \".*\"', 'POSTGRES_PASSWORD: \"%db_pass%\"' | Set-Content docker-compose.yml"
+
+
 echo [OK] Password written to .env.standalone
 echo.
 
