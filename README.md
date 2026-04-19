@@ -7,12 +7,12 @@
 ## 📋 Table of Contents
 
 - [How the Security Pipeline Works](#how-the-security-pipeline-works)
-- [Quick Start - Run with One Command](#quick-start-run-with-one-command)
+- [Quick Start - Run with One Command](#quick-start---run-with-one-command)
 - [What Does the Setup Script Do?](#what-does-the-setup-script-do)
 - [Getting Your Secrets](#getting-your-secrets)
-- [Local Development (No Docker)](#local-development-no-docker)
+- [Local Development (No Docker)](#%EF%B8%8Flocal-development-no-docker)
 - [Project Structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
+- [Troubleshooting](#%EF%B8%8Ftroubleshooting)
 
 ---
 
