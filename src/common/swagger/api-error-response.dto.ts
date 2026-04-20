@@ -15,20 +15,20 @@ export class ApiErrorResponseDto {
     statusCode!: number;
 
     @ApiProperty({
-        example: 'email must be an email',
+        example: 'Validation failed or invalid input data',
         description: 'Primary human-readable error message',
     })
     message!: string;
 
     @ApiProperty({
-        example: ['email must be an email', 'password must be longer than or equal to 8 characters'],
+        example: ['field "email" must be a valid email', 'field "name" is required'],
         description: 'Validation detail list (class-validator); null when a single message suffices',
         nullable: true,
         type: [String],
     })
     errors!: string[] | null;
 
-    @ApiProperty({ example: '/auth/login', description: 'Request path' })
+    @ApiProperty({ example: '/api/v1/resource', description: 'Request path' })
     path!: string;
 
     @ApiProperty({

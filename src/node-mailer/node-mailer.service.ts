@@ -29,7 +29,7 @@ export class NodeMailerService {
     }
 
     async resetPassword(user: User, token: string) {
-        const resetLink = `https://localhost:3000/reset-password?token=${token}`;
+        const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
         await this.mailerService.sendMail({
             to: user.email,
             from: '"Secure Mail" <support@securemail.com>',

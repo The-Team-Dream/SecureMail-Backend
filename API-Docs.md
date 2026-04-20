@@ -1,5 +1,5 @@
 # SecureMail API Documentation
-
+### By Swilam - (Securemail team leader)❤️
 Base URL: `http://localhost:3000`
 
 All successful responses are wrapped as:
@@ -20,7 +20,7 @@ All error responses follow:
 
 |#| Method | Endpoint | Description | Auth |
 |-|--------|----------|-------------|------|
-|1| GET | `/` | Liveness check | ❌ |
+|1| GET | `/health` | Liveness check | ❌ |
 |2| POST | `/auth/register` | Register new account | ❌ |
 |3| POST | `/auth/verify-register-otp` | Verify registration OTP | ❌ |
 |4| POST | `/auth/login` | Login with email & password | ❌ |
@@ -134,7 +134,7 @@ All error responses follow:
 
 ## Health
 
-### `GET /`
+### `GET /health`
 Liveness check.
 
 **Response `200`:**
