@@ -3,15 +3,15 @@ import { PrismaService } from '../prisma.service';
 import { MalwareService } from './pipeline/6-malware/malware.service';
 import type { MalwarePipelinePack } from './pipeline/6-malware/malware.types';
 import {
-    scanFileResponseToSignals,
-    attachMalwareOkIntegrationMeta,
-    failedMalwareIntegrationPayload,
+  scanFileResponseToSignals,
+  attachMalwareOkIntegrationMeta,
+  failedMalwareIntegrationPayload,
 } from './pipeline/6-malware/malware.mapping';
 import { AiAgentService } from './pipeline/10-ai-agent/ai-agent.service';
 import {
-    analysisReportToAiSignals,
-    attachOkIntegrationMeta,
-    failedIntegrationPayload,
+  analysisReportToAiSignals,
+  attachOkIntegrationMeta,
+  failedIntegrationPayload,
 } from './pipeline/10-ai-agent/ai-agent.mapping';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, FolderType } from '@prisma/client';
