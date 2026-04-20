@@ -49,7 +49,7 @@ services:
     container_name: securemail-postgres
     env_file: .env.standalone
     environment:
-      POSTGRES_PASSWORD: "1234"
+      POSTGRES_PASSWORD: "0000"
       POSTGRES_DB: securemail
       POSTGRES_USER: postgres
     volumes:
