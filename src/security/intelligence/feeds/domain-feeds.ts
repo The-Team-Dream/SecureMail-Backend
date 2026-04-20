@@ -1,4 +1,4 @@
-import whois from 'whois-json';
+﻿import whois from 'whois-json';
 import { DomainSignals } from "src/security/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -58,13 +58,10 @@ export async function checkDomainWhois(domain: string): Promise<Partial<DomainSi
     try {
         const data = await whois(domain);
         const creationDate = data.creationDate ? new Date(data.creationDate) : undefined;
-        // لو مفيش creation date → مش نحكم إنه newly registered
         if (!creationDate) {
             return {
                 domainRegistrar: data.registrar ?? undefined,
                 whoisHidden: !data.registrant,
-                // domainAgeDays و newlyRegisteredDomain مش بنحطهم
-                // الـ rule هتشوفهم undefined وهتـ skip
             };
         }
         const ageDays = Math.floor(

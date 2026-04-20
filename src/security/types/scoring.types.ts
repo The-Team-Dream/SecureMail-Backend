@@ -1,4 +1,4 @@
-export type RiskTier = 'SAFE' | 'SPAM' | 'SUSPICIOUS' | 'PHISHING' | 'MALICIOUS';
+﻿export type RiskTier = 'SAFE' | 'SPAM' | 'SUSPICIOUS' | 'PHISHING' | 'MALICIOUS';
 
 export interface ScoreBreakdown {
     // Tier 1 — Hard Signals
@@ -14,8 +14,6 @@ export interface ScoreBreakdown {
     urlThreatScore: number;   // URL threat score
     urlDomainAmplifier: number;   // URL + Domain spoof combined amplifier
     becReplyToBonus: number;   // BEC behavioral + reply-to mismatch
-
-    // Malware (للـ breakdown فقط — مش في الـ sum)
     malwareScore: number;
 
     // Totals

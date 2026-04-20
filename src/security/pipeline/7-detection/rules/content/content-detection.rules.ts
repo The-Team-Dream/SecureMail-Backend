@@ -31,9 +31,6 @@ function isIpUrl(url: string): boolean {
 }
 
 const ARCHIVE_EXTENSIONS = new Set(['.zip', '.rar', '.7z', '.gz', '.tar', '.iso']);
-
-// ✅ يقرأ من ctx.urlResult اللي اتحسب بالفعل في Stage 5
-// مفيش regex على الـ body — بس تشيك على الـ signals الجاهزة
 export class IpBasedUrlRule extends BaseDetectionRule {
   readonly id = 'ip_based_url';
   readonly description = 'Email contains a URL with a raw IP address instead of a domain name';
@@ -43,7 +40,6 @@ export class IpBasedUrlRule extends BaseDetectionRule {
   readonly scoreTarget = 'phishing' as const;
 
   evaluate(ctx: Readonly<DetectionContext>): RuleResult {
-    // Stage 5 (URL Analysis) بتحسب isIpBased لكل URL
     const hasIpUrl = ctx.urlResult?.analyzedUrls?.some(u => u.isIpBased) ?? false;
     if (!hasIpUrl) return this.notTriggered();
 
@@ -53,8 +49,6 @@ export class IpBasedUrlRule extends BaseDetectionRule {
     );
   }
 }
-
-// ✅ يقرأ من ctx.urlResult اللي اتحسب بالفعل في Stage 5
 export class ShortenedUrlRule extends BaseDetectionRule {
   readonly id = 'shortened_url';
   readonly description = 'Email contains a shortened URL that hides the real destination';
@@ -64,7 +58,6 @@ export class ShortenedUrlRule extends BaseDetectionRule {
   readonly scoreTarget = 'phishing' as const;
 
   evaluate(ctx: Readonly<DetectionContext>): RuleResult {
-    // Stage 5 (URL Analysis) بتحسب isShortened لكل URL
     const hasShortened = ctx.urlResult?.analyzedUrls?.some(u => u.isShortened) ?? false;
     if (!hasShortened) return this.notTriggered();
 

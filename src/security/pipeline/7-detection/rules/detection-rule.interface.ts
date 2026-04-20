@@ -1,4 +1,4 @@
-import { DetectionRule, RuleResult } from 'src/security/types';
+﻿import { DetectionRule, RuleResult } from 'src/security/types';
 import { DetectionContext } from '../rule-engine/detection-context';
 
 export abstract class BaseDetectionRule implements DetectionRule {
@@ -20,7 +20,7 @@ export abstract class BaseDetectionRule implements DetectionRule {
       severity:       this.severity,
       triggered:      true,
       originalScore:  scoreOverride ?? this.weight,
-      amplifiedScore: scoreOverride ?? this.weight, // بيتحدث بعدين من RuleGraphService
+      amplifiedScore: scoreOverride ?? this.weight,
       scoreTarget:this.scoreTarget,
       confidence,
       explanation,

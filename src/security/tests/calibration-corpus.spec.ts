@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // security/tests/calibration-corpus.spec.ts
 // 25 benign emails — must all return SAFE or SPAM max (no false positives)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,8 +23,6 @@ function makeContext(overrides: Partial<RawEmailInput> = {}) {
     receivedAt: new Date(), ...overrides,
   });
   const auth = new AuthenticationService().analyze(parsed);
-  // مفيش phishingScore/spamScore على الـ ctx — الـ ScoringService بيحسبهم من ruleResults
-  // الـ corpus emails بتعدي من غير rules مضافة = score من الـ reputation/auth فقط
   return new DetectionContext(parsed, auth, UNKNOWN_REPUTATION, DEFAULT_BEHAVIOR, null, null);
 }
 

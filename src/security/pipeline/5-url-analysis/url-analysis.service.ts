@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional, Inject, OnModuleInit } from '@nestjs/common';
+﻿import { Injectable, Logger, Optional, Inject, OnModuleInit } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices';
 import { Observable, firstValueFrom } from 'rxjs';
 import { IntelligenceCacheService } from '../../intelligence/intelligence-cache.service';
@@ -148,12 +148,9 @@ export class UrlAnalysisService implements OnModuleInit {
     const urls = email.urls.slice(0, 30);
 
     // Layer 4: gRPC — fire and forget, enriches cache for next lookups
-    // بنشغله قبل الـ cache lookup عشان لو رجع بسرعة يتحفظ في الـ cache
     if (this.urlIntelClient) {
       this.fetchAndCacheGrpcResults(urls).catch(() => null); // non-blocking
     }
-
-    // Layer 2+3: Cache → Feeds (جوه IntelligenceCacheService)
     const intelMap = await this.intel.lookupUrls(urls);
 
     // Layer 1 + Merge: Heuristics + Intel → final signal per URL
@@ -166,12 +163,8 @@ export class UrlAnalysisService implements OnModuleInit {
 
   // ─── Signal Builder — Layer 1 + Merge ────────────────────────────────────
   //
-  // بيحسب الـ flags من الـ URL نفسه مباشرة (مش من threat text)
-  // وبيعمل merge مع نتيجة الـ feeds
 
   private buildSignal(url: string, intel: UrlIntelResult | null): UrlThreatSignal {
-
-    // ── Layer 1: Local Heuristics — من الـ URL مباشرة ───────────────────────
     const parsed = parseUrlDomain(url);
     const hostname = parsed?.hostname ?? '';
 
@@ -182,11 +175,9 @@ export class UrlAnalysisService implements OnModuleInit {
     const isSuspiciousTld = parsed
       ? SUSPICIOUS_TLDS.has(parsed.publicSuffix)
       : false;
-    // Base64 obfuscation: long base64 string في الـ URL path
     const isBase64Encoded = /[A-Za-z0-9+/]{30,}={0,2}/.test(
       decodeURIComponent(url).replace(/https?:\/\/[^/]+/, ''),
     );
-    // Redirect chain مخبي في الـ URL نفسه (url=http://... في الـ params)
     const hasRedirectChain = (url.match(/https?:\/\//g) ?? []).length > 1;
 
     // Subdomain brand impersonation
@@ -226,7 +217,7 @@ export class UrlAnalysisService implements OnModuleInit {
       heuristicThreats.push(`Brand impersonation via subdomain: ${subdomainSpoof!.spoofedBrand}`);
     }
 
-    heuristicScore = Math.min(80, heuristicScore); // cap — feeds بتكمل الباقي
+    heuristicScore = Math.min(80, heuristicScore);
 
     // ── Merge: max(heuristic, feed) ───────────────────────────────────────────
     const feedScore = intel?.threatScore ?? 0;
@@ -235,16 +226,12 @@ export class UrlAnalysisService implements OnModuleInit {
     const feedSources = intel?.sources ?? [];
 
     const finalScore = Math.max(feedScore, heuristicScore);
-
-    // الـ verdict بييجي من الـ feed لو موجود، غير كده من الـ heuristic score
     const verdict: UrlThreatSignal['verdict'] =
       feedVerdict === 'malicious' ? 'malicious' :
       finalScore >= 70 ? 'malicious' :
       feedVerdict === 'suspicious' || finalScore >= 40 ? 'suspicious' :
       finalScore > 0 ? 'suspicious' :
       'clean';
-
-    // ادمج الـ threat descriptions
     const allThreats = [
       ...heuristicThreats,
       ...(feedThreat ? [feedThreat] : []),
@@ -268,10 +255,7 @@ export class UrlAnalysisService implements OnModuleInit {
   // ─── Aggregation ──────────────────────────────────────────────────────────
   //
   // totalThreatScore = max×0.7 + avg×0.3
-  // ده أدق من average وحده — الـ worst URL بيأثر أكتر
   //
-  // hasMaliciousUrl = verdict malicious أو score>=80 مع feed confirmation
-  // (مش heuristics وحدها عشان نتجنب false positives)
 
   private aggregateSignals(signals: UrlThreatSignal[], urlCount: number): UrlAnalysisSignals {
     if (signals.length === 0) {
@@ -283,8 +267,6 @@ export class UrlAnalysisService implements OnModuleInit {
       signals.reduce((sum, s) => sum + s.threatScore, 0) / signals.length,
     );
     const totalThreatScore = Math.min(100, Math.round(maxScore * 0.7 + avgScore * 0.3));
-
-    // hasMaliciousUrl = feed confirmed أو heuristic خالص >= 70
     const hasMaliciousUrl = signals.some(s =>
       s.verdict === 'malicious' ||
       (s.threatScore >= 80 && (s.sources?.length ?? 0) > 0),
@@ -309,7 +291,6 @@ export class UrlAnalysisService implements OnModuleInit {
   }
 
   // ─── gRPC: fire-and-forget cache enrichment ───────────────────────────────
-  // مش blocking — بيشتغل في الخلفية ويحفظ في الـ cache للمرة الجاية
 
   private async fetchAndCacheGrpcResults(urls: string[]): Promise<void> {
     if (!this.urlIntelClient) return;

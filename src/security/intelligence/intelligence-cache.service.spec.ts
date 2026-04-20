@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // security/intelligence/intelligence-cache.service.spec.ts
 //
 // Unit tests for IntelligenceCacheService — matches actual API:
@@ -66,8 +66,6 @@ describe('IntelligenceCacheService — URL lookup', () => {
   });
 
   it('✅ IP-based URL → isIpBased is detectable via url-analysis (not direct intel)', async () => {
-    // IntelligenceCacheService لا تحسب الـ heuristics — ده دور UrlAnalysisService
-    // بس بتحفظ وترجع الـ result بشكل صح
     const result = await makeService().lookupUrl('http://192.168.1.1/login');
     expect(result.url).toBe('http://192.168.1.1/login');
     expect(result.source).toBe('local');

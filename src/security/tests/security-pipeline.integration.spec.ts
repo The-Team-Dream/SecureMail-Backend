@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // security/tests/security-pipeline.integration.spec.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -33,8 +33,6 @@ function makeIntelService(redis: any = null) {
 }
 
 /**
- * بدل ctx.phishingScore/spamScore — بنضيف rules بالـ scoreTarget المناسب.
- * الـ ScoringService هو اللي بيجمعهم من ruleResults.
  *
  * rules: Array<{ id, score?, scoreTarget? }>
  *   - scoreTarget default = 'phishing'

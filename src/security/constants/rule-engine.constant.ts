@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // classification.constants.ts
 // All shared keyword lists, patterns, and maps used across rule files.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,7 +17,6 @@ export const SPAM_KEYWORDS = [
 ];
 
 // ─── Phishing Urgent Patterns ─────────────────────────────────────────────────
-// ✅ مُحسَّن: زيادة Arabic patterns + verify identity
 export const PHISHING_URGENT_PATTERNS = [
   /\b(account\s+(suspended|locked|disabled|compromised))\b/i,
   /\b(verify\s+(your|now|immediately))\b/i,
@@ -28,20 +27,19 @@ export const PHISHING_URGENT_PATTERNS = [
   /\b(password\s+expired|reset\s+password)\b/i,
   /\b(update\s+your\s+information)\b/i,
   /\b(click\s+here\s+to\s+(verify|confirm|update))\b/i,
-  /\b(verify\s+identity|confirm\s+identity)\b/i,           // ✅ مضاف
+  /\b(verify\s+identity|confirm\s+identity)\b/i,
   /\b(unauthorized\s+access|someone\s+tried)\b/i,
   /\b(limited\s+time|expires\s+soon|within\s+\d+\s*hours?)\b/i,
   // Arabic patterns — Egyptian market
   /(حسابك\s+(معلق|مغلق|موقوف|محظور))/u,
   /(نشاط\s+مشبوه|محاولة\s+(دخول|تسجيل)\s+غير\s+مصرحة?)/u,
-  /(تحديث\s+بياناتك|تأكيد\s+هويتك|التحقق\s+من\s+حسابك)/u,  // ✅ مضاف
-  /(انتهت\s+صلاحية|تجديد\s+(كلمة\s+المرور|الحساب))/u,       // ✅ مضاف
-  /(اضغط\s+هنا|انقر\s+هنا)\s+(للتحقق|للتأكيد|للتحديث)/u,   // ✅ مضاف
-  /(تحقق\s+من\s+هويتك|أدخل\s+بياناتك|حسابك\s+في\s+خطر)/u,  // ✅ مضاف
+  /(تحديث\s+بياناتك|تأكيد\s+هويتك|التحقق\s+من\s+حسابك)/u,
+  /(انتهت\s+صلاحية|تجديد\s+(كلمة\s+المرور|الحساب))/u,
+  /(اضغط\s+هنا|انقر\s+هنا)\s+(للتحقق|للتأكيد|للتحديث)/u,
+  /(تحقق\s+من\s+هويتك|أدخل\s+بياناتك|حسابك\s+في\s+خطر)/u,
 ];
 
 // ─── BEC Patterns ─────────────────────────────────────────────────────────────
-// ✅ مُحسَّن: زيادة vendor change + invoice patterns
 export const BEC_PATTERNS = [
   /\b(urgent\s+payment|wire\s+transfer|bank\s+transfer)\b/i,
   /\b(gift\s+card[s]?|itunes|google\s+play\s+card)\b/i,
@@ -51,8 +49,8 @@ export const BEC_PATTERNS = [
   /\b(keep\s+this\s+(private|confidential|between\s+us))\b/i,
   /\b(ceo|president|director|executive)\s+(request|approval|authorization)\b/i,
   /\b(process\s+this\s+payment|approve\s+this\s+transfer)\b/i,
-  /\b(vendor\s+change|supplier\s+update|new\s+bank\s+account)\b/i,  // ✅ مضاف
-  /\b(invoice\s+(attached|enclosed|pending|overdue))\b/i,            // ✅ مضاف
+  /\b(vendor\s+change|supplier\s+update|new\s+bank\s+account)\b/i,
+  /\b(invoice\s+(attached|enclosed|pending|overdue))\b/i,
 ];
 
 // ─── Conversation Hijacking Patterns ──────────────────────────────────────────
@@ -102,7 +100,6 @@ export const FINANCIAL_ATTACHMENT_KEYWORDS = [
 ];
 
 // ─── Sensitive Role Keywords (Display Name Impersonation) ────────────────────
-// ✅ مُحسَّن: phrases كاملة بدل كلمات منفردة لتجنب false positives
 export const SENSITIVE_ROLE_KEYWORDS = [
   // C-Suite — standalone word boundary
   'ceo', 'cfo', 'coo', 'cto', 'president', 'director',

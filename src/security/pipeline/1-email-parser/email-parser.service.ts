@@ -1,4 +1,4 @@
-
+﻿
 import { Injectable, Logger } from '@nestjs/common';
 import { ParsedAttachment, ParsedEmail, RawAuthHeaders, RawEmailInput } from 'src/security/types';
 

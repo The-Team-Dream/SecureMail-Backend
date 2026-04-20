@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
 import { DEFAULT_BEHAVIOR } from 'src/security/constants';
 import { BehaviorSignals, ParsedEmail } from 'src/security/types';
@@ -75,7 +75,6 @@ export class BehaviorService {
         mailBoxId: email.mailBoxId,
         fromAddr: { endsWith: `@${senderDomain}` },
       },
-      // FIX-4: أضفنا bodyText للـ topic inference
       select: { subject: true, bodyText: true, isSpam: true, isPhishing: true, receivedAt: true },
       take:    30,
       orderBy: { receivedAt: 'desc' },
@@ -85,8 +84,6 @@ export class BehaviorService {
     if (count === 0) {
       return this.newSenderSignals(email);
     }
-
-    // FIX-4: inferTopic يأخذ subjects + bodies
     const typicalTopic  = this.inferTopic(
       history.map(e => e.subject),
       history.map(e => e.bodyText ?? ''),

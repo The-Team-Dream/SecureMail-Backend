@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable,
   Logger,
   OnModuleInit,
@@ -253,7 +253,6 @@ export class IntelligenceCacheService implements OnModuleInit {
     }
 
     // ── Always write to memory cache ─────────────────────
-    // (TTL = min(requested, MEMORY_TTL_MS) عشان memory محدودة)
     this.memoryCache.set(key, {
       value: serialized,
       expiresAt: Date.now() + Math.min(ttlSeconds * 1000, this.MEMORY_TTL_MS),

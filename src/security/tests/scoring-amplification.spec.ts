@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // security/tests/scoring-amplification.spec.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -12,8 +12,6 @@ import { UNKNOWN_REPUTATION, DEFAULT_BEHAVIOR } from '../constants/default-signa
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * بدل ctx.phishingScore = X — بنضيف rule بالـ scoreTarget والـ amplifiedScore المناسب.
- * الـ ScoringService بيلف على ruleResults ويحسب phishing/spam scores منهم.
  */
 function addPhishingScore(ctx: DetectionContext, score: number, id = 'test_phishing'): void {
   ctx.addResult({
@@ -90,8 +88,6 @@ function makeCtx(overrides: {
       ? { verdict: overrides.malware.verdict, score: overrides.malware.score, severity: 'Critical' }
       : null,
   );
-
-  // بدل ctx.phishingScore/spamScore — بنضيف rules بالـ scoreTarget
   if (overrides.phishingScore) addPhishingScore(ctx, overrides.phishingScore);
   if (overrides.spamScore)     addSpamScore(ctx, overrides.spamScore);
 
@@ -226,14 +222,11 @@ describe('Scoring Engine — Correlation Amplification', () => {
   it('✅ ruleScore computed from ruleResults (not ctx.phishingScore)', async () => {
     const scorer = new ScoringService();
     const ctx    = makeCtx();
-
-    // ضيف rule بـ scoreTarget=phishing وـ amplifiedScore=60
     addPhishingScore(ctx, 60, 'phishing_rule_1');
     addSpamScore(ctx, 20, 'spam_rule_1');
     ctx.setCorrelation(await new CorrelationService().correlate(ctx));
 
     const result = scorer.computeRisk(ctx);
-    // الـ ruleScore لازم > 0 لأن في triggered rules
     expect(result.breakdown.ruleScore).toBeGreaterThan(0);
   });
 });
@@ -253,8 +246,6 @@ describe('Risk Tier Thresholds', () => {
     });
     const auth = new AuthenticationService().analyze(parsed);
     const ctx  = new DetectionContext(parsed, auth, UNKNOWN_REPUTATION, DEFAULT_BEHAVIOR, null, null);
-
-    // بدل ctx.phishingScore = X — بنضيف rule
     if (phishingScore > 0) addPhishingScore(ctx, phishingScore);
     ctx.setCorrelation(await new CorrelationService().correlate(ctx));
     return ctx;

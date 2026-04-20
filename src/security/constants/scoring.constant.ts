@@ -1,4 +1,4 @@
-export const RISK_THRESHOLDS = {
+﻿export const RISK_THRESHOLDS = {
     MALICIOUS: 90,
     PHISHING: 75,
     SUSPICIOUS: 50,
@@ -23,7 +23,7 @@ export const TIER_CAPS = {
     reputation: 40,   // IP + Domain threat feeds
 
     // Tier 2 — Soft Signals (medium trust)
-    rules: 60,   // Rule Engine — immature حالياً، cap منخفض
+    rules: 60,
     behavior: 25,   // Per-user behavioral anomaly
 
     // Tier 3 — Amplifiers (context boosters)

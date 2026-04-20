@@ -27,9 +27,6 @@ function extractBase(domain: string): string | null {
 }
 
 const PHISHING_URGENT = /\b(urgent|immediately|act now|verify account|password expired|wire transfer|gift card)\b/i;
-
-// ✅ يقرأ من ctx.reputation اللي اتحسب بالفعل في Stage 3
-// مفيش header parsing — بس تشيك على الـ IpSignals الجاهزة
 export class SuspiciousIpRule extends BaseDetectionRule {
   readonly id          = 'suspicious_received_headers';
   readonly description = 'Sender IP is blacklisted, a known attacker, Tor node, or anonymous proxy';
@@ -40,7 +37,6 @@ export class SuspiciousIpRule extends BaseDetectionRule {
   readonly minCorroboration = 1;
 
   evaluate(ctx: Readonly<DetectionContext>): RuleResult {
-    // Stage 3 (Reputation) بتحسب كل الـ IP signals من الـ threat feeds
     const rep = ctx.reputation;
     let score = 0;
     const indicators: string[] = [];
@@ -66,9 +62,6 @@ export class SuspiciousIpRule extends BaseDetectionRule {
     );
   }
 }
-
-// ✅ يقرأ من ctx.authResult اللي اتحسب بالفعل في Stage 2
-// مفيش header parsing — الـ AuthenticationService بتعمله بالكامل
 export class AuthFailureRule extends BaseDetectionRule {
   readonly id          = 'email_auth_failure';
   readonly description = 'SPF, DKIM, or DMARC authentication failed or is missing';
@@ -248,7 +241,6 @@ export class FirstContactRiskRule extends BaseDetectionRule {
   readonly scoreTarget = 'both' as const;
 
   evaluate(ctx: Readonly<DetectionContext>): RuleResult {
-    // Stage 4 (Behavior) بيجيب previousEmailCount من الـ DB
     if (ctx.behavior.previousEmailCount > 0) return this.notTriggered();
 
     let score = 10;
