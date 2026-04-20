@@ -31,23 +31,23 @@ export class DecisionService {
     confidence: number,
     isMalware: boolean,
   ): FinalVerdict['action'] {
-    // Malware confirmed → delete unconditionally
+    // Malware confirmed → delete immediately
     if (isMalware) return 'delete';
     switch (label) {
       case 'MALICIOUS':
         return confidence >= CONFIDENCE_GATES.delete
           ? 'delete'
-          : 'block'; // confident enough إن ده malicious بس مش 100%
+          : 'block';
       case 'PHISHING':
         return confidence >= CONFIDENCE_GATES.block
           ? 'block'
-          : 'quarantine'; // suspicious بس مش confident إنه phishing
+          : 'quarantine';
       case 'SPAM':
         return 'quarantine';
       case 'SUSPICIOUS':
         return confidence >= CONFIDENCE_GATES.quarantine
           ? 'quarantine'
-          : 'allow'; // low confidence suspicious → allow مع details في الـ UI
+          : 'allow';
       default:
         return 'allow';
     }

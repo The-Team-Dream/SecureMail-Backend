@@ -1,18 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// detection/rules/advanced/advanced-detection.rules.ts
-//
-// Rules:
-//   ConversationHijackingRule      (Rule 23)
-//   HomoglyphDomainSpoofingRule    (Rule 17)
-//   LookalikeDomainRule            (Rule 24)
-//   BrandAbuseRule                 (Rule 16)
-//   HTMLObfuscationRule            (Rule 25)
-//   Base64EncodedUrlRule           (Rule 26)
-//   NewlyRegisteredDomainRule      (Rule 27) ← من ctx.reputation
-//   MaliciousUrlRule               (Rule 28) ← من ctx.urlResult
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { Logger } from '@nestjs/common';
+﻿import { Logger } from '@nestjs/common';
 import { BaseDetectionRule } from '../detection-rule.interface';
 import { DetectionContext } from '../../rule-engine/detection-context';
 import {
@@ -25,11 +11,9 @@ import { RuleResult } from 'src/security/types';
 
 export type { BaseDetectionRule } from '../detection-rule.interface';
 
-// ─── Derived sets (built once at module load) ─────────────────────────────────
 const ALL_OFFICIAL_BASES = new Set<string>([...BRAND_MAP.values()].flat());
 const ALL_BRAND_NAMES    = [...BRAND_MAP.keys()];
 
-// ─── Shared constants ─────────────────────────────────────────────────────────
 const CONVERSATION_HIJACK_PATTERNS = [
   /\b(wire\s+transfer|bank\s+transfer)\b/i,
   /\b(update\s+(payment|banking)\s+details?)\b/i,
@@ -43,7 +27,6 @@ const LOOKALIKE_KEYWORDS = [
   'auth', 'signin', 'support', 'helpdesk', 'service', 'portal',
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractBase(domain: string): string | null {
   if (!domain) return null;
@@ -63,7 +46,6 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-// ─── Rule 28: Malicious URL ───────────────────────────────────────────────────
 // ✅ يقرأ من ctx.urlResult اللي اتحسب بالفعل في Stage 5
 // Stage 5 بتروح للـ VirusTotal + PhishTank + URLScan وبترجع verdict لكل URL
 export class MaliciousUrlRule extends BaseDetectionRule {
@@ -101,7 +83,6 @@ export class MaliciousUrlRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 27: Newly Registered Domain ────────────────────────────────────────
 // ✅ يقرأ من ctx.reputation اللي اتحسب بالفعل في Stage 3
 // Stage 3 بتجيب domainAgeDays + newlyRegisteredDomain من الـ WHOIS/RDAP
 // مفيش network call هنا — البيانات جاهزة
@@ -116,12 +97,12 @@ export class NewlyRegisteredDomainRule extends BaseDetectionRule {
   evaluate(ctx: Readonly<DetectionContext>): RuleResult {
     const rep = ctx.reputation;
 
-    // لو مفيش domain age data → skip
+    // Skip if no domain age data available
     if (!rep.newlyRegisteredDomain && (rep.domainAgeDays === undefined || rep.domainAgeDays === null)) {
       return this.notTriggered();
     }
 
-    // لو مش newly registered وعمره > 90 يوم → skip
+    // Skip if domain is older than 90 days and not flagged
     if (!rep.newlyRegisteredDomain && (rep.domainAgeDays ?? 999) > 90) {
       return this.notTriggered();
     }
@@ -133,7 +114,7 @@ export class NewlyRegisteredDomainRule extends BaseDetectionRule {
     if      (ageDays <= 7)  score = 35;
     else if (ageDays <= 30) score = 25;
     else if (ageDays <= 90) score = 10;
-    else if (rep.newlyRegisteredDomain) score = 15; // flag موجودة بدون exact days
+    else if (rep.newlyRegisteredDomain) score = 15;
 
     if (score === 0) return this.notTriggered();
 
@@ -153,7 +134,6 @@ export class NewlyRegisteredDomainRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 23: Conversation Hijacking ─────────────────────────────────────────
 export class ConversationHijackingRule extends BaseDetectionRule {
   readonly id          = 'conversation_hijacking_attempt';
   readonly description = 'Financial request injected into a reply/forward thread';
@@ -163,7 +143,7 @@ export class ConversationHijackingRule extends BaseDetectionRule {
   readonly scoreTarget = 'phishing' as const;
 
   evaluate(ctx: Readonly<DetectionContext>): RuleResult {
-    // isReplyThread بيتحدد في Stage 1 (Email Parser)
+    // isReplyThread is set in Stage 1 (Email Parser)
     if (!ctx.parsedEmail.isReplyThread) return this.notTriggered();
     const match = CONVERSATION_HIJACK_PATTERNS.find(p => p.test(ctx.parsedEmail.bodyPlain));
     if (!match) return this.notTriggered();
@@ -173,7 +153,6 @@ export class ConversationHijackingRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 17: Homoglyph Domain Spoofing ──────────────────────────────────────
 export class HomoglyphDomainSpoofingRule extends BaseDetectionRule {
   readonly id          = 'homoglyph_domain_spoofing';
   readonly description = 'Sender domain uses Unicode lookalike chars to impersonate a known brand';
@@ -201,7 +180,6 @@ export class HomoglyphDomainSpoofingRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 24: Lookalike Domain ───────────────────────────────────────────────
 export class LookalikeDomainRule extends BaseDetectionRule {
   readonly id          = 'lookalike_domain_attack';
   readonly description = 'Domain contains brand name + phishing keyword (e.g. fawry-verify.net)';
@@ -229,7 +207,6 @@ export class LookalikeDomainRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 16: Brand Abuse in Body ────────────────────────────────────────────
 export class BrandAbuseRule extends BaseDetectionRule {
   readonly id          = 'brand_abuse_in_body';
   readonly description = 'Body mentions a known brand repeatedly but sender is not that brand';
@@ -270,7 +247,7 @@ export class BrandAbuseRule extends BaseDetectionRule {
       }
     }
 
-    // Phase 2: Arabic aliases — Egyptian market
+    // Phase 2: Arabic brand aliases
     for (const [brand, arabicAliases] of ARABIC_BRAND_ALIASES.entries()) {
       const officialBases = BRAND_MAP.get(brand) ?? [];
       if (officialBases.includes(senderBase)) continue;
@@ -289,7 +266,6 @@ export class BrandAbuseRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 25: HTML Obfuscation ────────────────────────────────────────────────
 export class HTMLObfuscationRule extends BaseDetectionRule {
   readonly id          = 'html_obfuscation_phishing';
   readonly description = 'HTML uses obfuscation: invisible chars, CSS hiding, entity-encoded brands';
@@ -337,7 +313,6 @@ export class HTMLObfuscationRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 26: Base64 Encoded URL ─────────────────────────────────────────────
 export class Base64EncodedUrlRule extends BaseDetectionRule {
   readonly id          = 'base64_encoded_url';
   readonly description = 'Email contains base64-encoded URLs — scanner evasion technique';

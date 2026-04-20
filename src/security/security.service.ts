@@ -38,10 +38,8 @@ import {
 import { EmailParserService } from './pipeline/1-email-parser/email-parser.service';
 import { DEFAULT_BEHAVIOR, UNKNOWN_REPUTATION } from 'src/security/constants';
 
-//Pipeline input 
 export interface SecurityPipelineInput extends RawEmailInput { }
 
-//Pipeline output 
 export interface SecurityPipelineResult {
   parsedEmail: ParsedEmail;
   verdict: FinalVerdict;
@@ -95,16 +93,14 @@ export class SecurityService {
     }
   }
 
-  //Main pipeline 
   private async runPipeline(
     input: SecurityPipelineInput,
     userId: number,
     startMs: number,
   ): Promise<SecurityPipelineResult> {
 
-    //Stage 1: Email Parsing 
     const parsedEmail = this.emailParser.parse(input);
-    //Stages: 2,3,4,5,6 in parallel with each other
+
     const malwarePromise = this.runMalwareScan(input);
     const [authSignals, reputationSignals, behaviorSignals, urlAnalysisSignals, malwareRace] = await Promise.all([
       this.authentication.analyze(parsedEmail),
@@ -136,7 +132,6 @@ export class SecurityService {
       malwarePack = malwareRace;
     }
 
-    //Stage 7: Build Detection Context and pass it to rule engine
     const ctx = new DetectionContext(
       parsedEmail,
       authSignals,
@@ -148,33 +143,26 @@ export class SecurityService {
     );
     await this.ruleEngine.runRuleEngine(ctx);
 
-    //Stage 8: Apply graph amplification 
     await this.ruleGraph.applyGraphAmplification(ctx);
 
-    //Stage 9: Correlation — returns result, stored in ctx
     ctx.setCorrelation(await this.correlation.correlate(ctx));
 
-    //Stage 10: Compute risk assessment — stored in ctx
     ctx.setRiskAssessment(this.scoring.computeRisk(ctx));
     if (!ctx.riskAssessment) {
       this.logger.error('Scoring failed — aborting pipeline');
       return this.buildFallbackResult(input, startMs);
     }
 
-    //Stage 11: Decision — stored in ctx
     ctx.setVerdict(this.decision.decide(ctx.riskAssessment!, ctx));
     if (!ctx.verdict) {
       this.logger.error('Decision failed — aborting pipeline');
       return this.buildFallbackResult(input, startMs);
     }
 
-    //Stage 12: AI Agent — returns AiSignals, stored in ctx
     ctx.setAiReport(await this.runAiAgent(ctx));
 
-    //Stage 13: Persist results — reads everything from ctx
     await this.persistResults(input, ctx);
 
-    //Stage 14: Notifications — reads everything from ctx
     await this.sendNotifications(input, userId, ctx);
 
     // If malware scanning still running after sync window, finish in background (late malicious verdict)
@@ -361,7 +349,6 @@ export class SecurityService {
     };
   }
 
-  //AI Agent — reads everything from ctx, returns AiSignals
   private async runAiAgent(ctx: DetectionContext): Promise<AiSignals> {
     const risk = ctx.riskAssessment!;
     const email = ctx.parsedEmail;
@@ -408,7 +395,6 @@ export class SecurityService {
     return {};
   }
 
-  //Persist results — reads everything from ctx
   private async persistResults(
     input: SecurityPipelineInput,
     ctx: DetectionContext,
@@ -454,7 +440,6 @@ export class SecurityService {
     }).catch(err => this.logger.warn('Email update failed', { emailId, error: String(err) }));
   }
 
-  //Notifications — reads everything from ctx
   private async sendNotifications(
     input: SecurityPipelineInput,
     userId: number,
@@ -495,7 +480,6 @@ export class SecurityService {
     } catch { /* non-fatal */ }
   }
 
-  //Folder helper 
   private async getOrCreateFolder(mailBoxId: number, type: FolderType) {
     let folder = await this.prisma.folder.findFirst({ where: { mailBoxId, type } });
     if (!folder) {
@@ -506,7 +490,6 @@ export class SecurityService {
     return folder;
   }
 
-  //Fallback result 
   private buildFallbackResult(
     input: SecurityPipelineInput,
     startMs: number,

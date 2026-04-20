@@ -9,7 +9,7 @@ export class ScoringService {
 
   computeRisk(ctx: DetectionContext): RiskAssessment {
 
-    // OVERRIDE GATE: Malware or URL malicious = MALICIOUS
+    // Hard override: malware or confirmed malicious URL = MALICIOUS tier
     const isMalware = ctx.malware?.verdict === 'malicious' || (ctx.malware?.score ?? 0) >= 50;
     const isUrlMalicious = ctx.urlResult?.hasMaliciousUrl === true;
 
@@ -17,15 +17,10 @@ export class ScoringService {
       return this.buildMaliciousOverride(ctx, isMalware, isUrlMalicious);
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // TIER 1 — HARD SIGNALS (Auth + Reputation)
-    // High trust — ده اللي بنبني عليه كل حاجة
-    // ══════════════════════════════════════════════════════════════════════════
-
-    // Auth Penalty — SPF/DKIM/DMARC failures
+    // Tier 1 — Auth penalty (SPF/DKIM/DMARC)
     const authPenalty = this.computeAuthPenalty(ctx.authResult);
 
-    // Reputation — IP + Domain منفصلين مع bonus لو الاتنين عاليين
+    // Tier 1 — Reputation (IP + domain scores)
     const ipScore = ctx.reputation.ipReputationScore ?? 0;
     const domainScore = ctx.reputation.domainReputationScore ?? 0;
     const bothHighBonus = (ipScore >= 20 && domainScore >= 20) ? 8 : 0;
@@ -34,16 +29,7 @@ export class ScoringService {
       Math.max(ipScore, domainScore) + bothHighBonus,
     );
 
-    const tier1Score = authPenalty + reputationScore; // max ~90
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // TIER 2 — SOFT SIGNALS (Rules + Behavior)
-    // Rules: مضروبة في RULE_MATURITY_FACTOR عشان نحمي من false positives
-    // Behavior: per-user، أكتر ثقة من الـ rules
-    // ══════════════════════════════════════════════════════════════════════════
-
-    // Rule Score — weighted blend (70% phishing + 30% spam)
-    // بناخد blend مش max عشان ميضيعش signal لو الاتنين عاليين
+    // Tier 2 — Rule score (phishing 70% + spam 30% blend) + behavior score
     let phishingScore = 0;
     let spamScore = 0;
     for (const rule of ctx.ruleResults.values()) {
@@ -62,13 +48,9 @@ export class ScoringService {
 
     const behaviorScore = Math.min(TIER_CAPS.behavior, ctx.behavior.behaviorScore);
 
-    const tier2Score = ruleScore + behaviorScore; // max ~85
+    const tier2Score = ruleScore + behaviorScore;
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // TIER 3 — AMPLIFIERS (Correlation + URL)
-    // بيشتغلوا بالكامل بس لو في base signal كافي من Tier 1 أو Tier 2
-    // من غير base → max 10 بس عشان نمنع false positives
-    // ══════════════════════════════════════════════════════════════════════════
+    // Tier 3 — Amplifiers (correlation, URL, domain spoof, BEC). Capped when base signal is low.
 
     const urlThreatScore = Math.min(TIER_CAPS.url, ctx.urlResult?.totalThreatScore ?? 0);
 
@@ -94,15 +76,9 @@ export class ScoringService {
 
     const tier3Score = correlationBonus + urlThreatScore + urlDomainAmplifier + becReplyToBonus;
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // FINAL SCORE
-    // ══════════════════════════════════════════════════════════════════════════
     const rawTotal = tier1Score + tier2Score + tier3Score;
     const finalScore = Math.min(100, rawTotal);
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // TIER CLASSIFICATION + CONFIDENCE
-    // ══════════════════════════════════════════════════════════════════════════
     const riskTier = this.computeTier(finalScore);
     const confidence = this.computeConfidence(finalScore, tier1Score, tier2Score, ctx);
 
@@ -121,9 +97,7 @@ export class ScoringService {
       urlThreatScore,
       urlDomainAmplifier,
       becReplyToBonus,
-      // Malware (للـ breakdown فقط — مش في الـ sum)
       malwareScore: ctx.malware?.score ?? 0,
-      // Totals
       rawTotal,
       finalScore,
     };
@@ -143,16 +117,11 @@ export class ScoringService {
     };
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // OVERRIDE BUILDER
-  // لما Malware أو URL malicious يتأكد — بنبني الـ result مباشرة
-  // ══════════════════════════════════════════════════════════════════════════
   private buildMaliciousOverride(
     ctx: DetectionContext,
     isMalware: boolean,
     isUrlMalicious: boolean,
   ): RiskAssessment {
-    // بنحسب الـ scores العادية للـ breakdown بس — مش بتأثر على الـ verdict
     const authPenalty = this.computeAuthPenalty(ctx.authResult);
     const reputationScore = Math.min(
       TIER_CAPS.reputation,
@@ -164,7 +133,6 @@ export class ScoringService {
     const malwareScore = ctx.malware?.score ?? 0;
     const urlThreatScore = Math.min(TIER_CAPS.url, ctx.urlResult?.totalThreatScore ?? 0);
 
-    // Override score: malware = 95، URL malicious = 91
     const finalScore = isMalware ? 95 : 91;
 
     const breakdown: ScoreBreakdown = {
@@ -196,15 +164,9 @@ export class ScoringService {
     };
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // AUTH PENALTY
-  // SPF/DKIM/DMARC failures = real signals مش بس flags
-  // Triple failure = extra penalty لأن ده signature خاصة بالـ spoofed senders
-  // ══════════════════════════════════════════════════════════════════════════
   private computeAuthPenalty(auth: AuthSignals): number {
     let penalty = 0;
 
-    // SPF
     if (auth.spf.status === 'fail') penalty += 20;
     else if (auth.spf.status === 'softfail') penalty += 10;
     else if (auth.spf.status === 'none') penalty += 4;
@@ -217,7 +179,7 @@ export class ScoringService {
     if (auth.dmarc.status === 'fail') penalty += 15;
     else if (auth.dmarc.status === 'none') penalty += 3;
 
-    // Triple failure bonus — كلهم فشلوا = likely spoofed sender
+    // Triple SPF+DKIM+DMARC failure = likely spoofed sender
     const allFailed =
       auth.spf.status === 'fail' &&
       auth.dkim.status === 'fail' &&
@@ -227,22 +189,13 @@ export class ScoringService {
     return Math.min(TIER_CAPS.auth, penalty);
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // CONFIDENCE RESOLVER
-  // بيحسب إزاي الـ tiers بتدعم بعض — مش بس عدد الـ rules
-  //
-  //  HIGH   (85–95%) → Tier 1 + Tier 2 كلاهما يشيروا لنفس الاتجاه
-  //  MEDIUM (65–84%) → Tier 1 أو Tier 2 واحد منهم بس قوي
-  //  LOW    (40–64%) → Tier 3 هو اللي رفع الـ score
-  //  VERY LOW (<40%) → signal واحد أو behavior بس
-  // ══════════════════════════════════════════════════════════════════════════
   private computeConfidence(
     finalScore: number,
     tier1Score: number,
     tier2Score: number,
     ctx: DetectionContext,
   ): number {
-    let confidence = 40; // base
+    let confidence = 40;
 
     // Tier 1 contribution — high trust signals
     if (tier1Score >= 50) confidence += 35;
@@ -250,13 +203,12 @@ export class ScoringService {
     else if (tier1Score >= 15) confidence += 15;
     else if (tier1Score >= 5) confidence += 8;
 
-    // Tier 2 contribution — lower trust، أقل تأثير على الـ confidence
+    // Tier 2 contribution
     if (tier2Score >= 40) confidence += 20;
     else if (tier2Score >= 20) confidence += 12;
     else if (tier2Score >= 10) confidence += 6;
 
-    // Cross-tier corroboration bonus
-    // لو Tier 1 و Tier 2 الاتنين بيشيروا لنفس الاتجاه = أكيد أكتر
+    // Cross-tier corroboration: both tiers pointing the same direction = higher confidence
     const tier1Strong = tier1Score >= 20;
     const tier2Strong = tier2Score >= 15;
     if (tier1Strong && tier2Strong) confidence += 15;
@@ -269,8 +221,7 @@ export class ScoringService {
       confidence += CRITICAL_PATTERNS.has(pattern) ? 10 : 5;
     }
 
-    // Safe email — high score مع zero Tier 1 = lower confidence
-    // (ممكن يكون false positive من rules immature)
+    // Penalize high score with no Tier 1 signal (likely immature rule false-positive)
     if (finalScore >= 75 && tier1Score < 10) {
       confidence -= 20;
     }
@@ -278,9 +229,6 @@ export class ScoringService {
     return Math.min(95, Math.max(10, confidence));
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // HELPERS
-  // ══════════════════════════════════════════════════════════════════════════
   private computeTier(score: number): RiskTier {
     if (score >= RISK_THRESHOLDS.MALICIOUS) return 'MALICIOUS';
     if (score >= RISK_THRESHOLDS.PHISHING) return 'PHISHING';

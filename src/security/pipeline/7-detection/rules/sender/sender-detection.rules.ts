@@ -1,17 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// detection/rules/sender/sender-detection.rules.ts
-//
-// Rules:
-//   SenderDisplayNameMismatchRule  (Rule 7)
-//   DisplayNameImpersonationRule   (Rule 21)
-//   DisposableDomainRule           (Rule 3)
-//   ReplyToDomainMismatchRule      (Rule 18)
-//   FirstContactRiskRule           (Rule 13)
-//   SuspiciousIpRule               (Rule 19) ← من ctx.reputation
-//   AuthFailureRule                (Rule 20) ← من ctx.authResult
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { BaseDetectionRule } from '../detection-rule.interface';
+﻿import { BaseDetectionRule } from '../detection-rule.interface';
 import { DetectionContext } from '../../rule-engine/detection-context';
 import {
   BRAND_MAP,
@@ -23,7 +10,6 @@ import {
 } from 'src/security/constants';
 import { RuleResult } from 'src/security/types';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractDomain(addr: string): string | null {
   const m = addr.match(/@([^\s@]+)/);
@@ -42,7 +28,6 @@ function extractBase(domain: string): string | null {
 
 const PHISHING_URGENT = /\b(urgent|immediately|act now|verify account|password expired|wire transfer|gift card)\b/i;
 
-// ─── Rule 19: Suspicious IP / Received Headers ────────────────────────────────
 // ✅ يقرأ من ctx.reputation اللي اتحسب بالفعل في Stage 3
 // مفيش header parsing — بس تشيك على الـ IpSignals الجاهزة
 export class SuspiciousIpRule extends BaseDetectionRule {
@@ -82,7 +67,6 @@ export class SuspiciousIpRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 20: Auth Failure (SPF/DKIM/DMARC) ──────────────────────────────────
 // ✅ يقرأ من ctx.authResult اللي اتحسب بالفعل في Stage 2
 // مفيش header parsing — الـ AuthenticationService بتعمله بالكامل
 export class AuthFailureRule extends BaseDetectionRule {
@@ -120,7 +104,6 @@ export class AuthFailureRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 7: Sender Display Name Mismatch ─────────────────────────────────────
 export class SenderDisplayNameMismatchRule extends BaseDetectionRule {
   readonly id          = 'sender_display_name_mismatch';
   readonly description = 'Display name claims to be a known brand but sender domain does not match';
@@ -147,7 +130,6 @@ export class SenderDisplayNameMismatchRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 21: Display Name Impersonation ──────────────────────────────────────
 export class DisplayNameImpersonationRule extends BaseDetectionRule {
   readonly id          = 'display_name_impersonation';
   readonly description = 'Sender display name contains a sensitive role keyword (CEO, CFO, IT Support…)';
@@ -189,7 +171,6 @@ export class DisplayNameImpersonationRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 3: Disposable Domain ────────────────────────────────────────────────
 export class DisposableDomainRule extends BaseDetectionRule {
   readonly id          = 'disposable_sender_domain';
   readonly description = 'Sender uses a known disposable / throwaway email domain';
@@ -207,7 +188,6 @@ export class DisposableDomainRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 18: Reply-To Domain Mismatch ───────────────────────────────────────
 export class ReplyToDomainMismatchRule extends BaseDetectionRule {
   readonly id             = 'reply_to_domain_mismatch';
   readonly description    = 'Reply-To header points to a different domain than the sender';
@@ -259,7 +239,6 @@ export class ReplyToDomainMismatchRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 13: First Contact Risk ─────────────────────────────────────────────
 export class FirstContactRiskRule extends BaseDetectionRule {
   readonly id          = 'first_contact_sender_risk';
   readonly description = 'First email from this sender combined with suspicious signals';

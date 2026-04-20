@@ -1,18 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// detection/rules/content/content-detection.rules.ts
-//
-// Rules:
-//   UrgentPhishingLanguageRule   (Rule 8)
-//   BECLanguageRule              (Rule 14)
-//   CredentialHarvestingRule     (Rule 22)
-//   ExcessiveCapitalizationRule  (Rule 4)
-//   ExcessiveExclamationRule     (Rule 5)
-//   RiskyAttachmentRule          (Rule 15)
-//   IpBasedUrlRule               (Rule 9)  ← من ctx.urlResult
-//   ShortenedUrlRule             (Rule 10) ← من ctx.urlResult
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { BaseDetectionRule } from '../detection-rule.interface';
+﻿import { BaseDetectionRule } from '../detection-rule.interface';
 import { DetectionContext } from '../../rule-engine/detection-context';
 import {
   PHISHING_URGENT_PATTERNS,
@@ -24,7 +10,6 @@ import {
 } from 'src/security/constants';
 import { RuleResult } from 'src/security/types';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractDomainFromUrl(url: string): string | null {
   try { return new URL(url).hostname.toLowerCase(); }
@@ -47,7 +32,6 @@ function isIpUrl(url: string): boolean {
 
 const ARCHIVE_EXTENSIONS = new Set(['.zip', '.rar', '.7z', '.gz', '.tar', '.iso']);
 
-// ─── Rule 9: IP-based URL ─────────────────────────────────────────────────────
 // ✅ يقرأ من ctx.urlResult اللي اتحسب بالفعل في Stage 5
 // مفيش regex على الـ body — بس تشيك على الـ signals الجاهزة
 export class IpBasedUrlRule extends BaseDetectionRule {
@@ -70,7 +54,6 @@ export class IpBasedUrlRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 10: Shortened URL ───────────────────────────────────────────────────
 // ✅ يقرأ من ctx.urlResult اللي اتحسب بالفعل في Stage 5
 export class ShortenedUrlRule extends BaseDetectionRule {
   readonly id = 'shortened_url';
@@ -92,7 +75,6 @@ export class ShortenedUrlRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 8: Urgent Phishing Language ─────────────────────────────────────────
 export class UrgentPhishingLanguageRule extends BaseDetectionRule {
   readonly id = 'urgent_phishing_language';
   readonly description = 'Email contains urgency or threatening language typical of phishing';
@@ -111,7 +93,6 @@ export class UrgentPhishingLanguageRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 14: BEC Language ────────────────────────────────────────────────────
 export class BECLanguageRule extends BaseDetectionRule {
   readonly id = 'bec_language_detected';
   readonly description = 'Business Email Compromise patterns: financial requests, secrecy instructions';
@@ -133,7 +114,6 @@ export class BECLanguageRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 22: Credential Harvesting ──────────────────────────────────────────
 export class CredentialHarvestingRule extends BaseDetectionRule {
   readonly id = 'credential_harvesting_attempt';
   readonly description = 'HTML body contains login forms or password inputs pointing to external domains';
@@ -193,7 +173,6 @@ export class CredentialHarvestingRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 4: Excessive Capitalization ────────────────────────────────────────
 export class ExcessiveCapitalizationRule extends BaseDetectionRule {
   readonly id = 'excessive_capitalization';
   readonly description = 'Subject or body has more than 50% uppercase characters — spam indicator';
@@ -218,7 +197,6 @@ export class ExcessiveCapitalizationRule extends BaseDetectionRule {
 
 }
 
-// ─── Rule 5: Excessive Exclamation Marks ─────────────────────────────────────
 export class ExcessiveExclamationRule extends BaseDetectionRule {
   readonly id = 'excessive_exclamation_marks';
   readonly description = 'More than 3 exclamation marks in email body — spam indicator';
@@ -234,7 +212,6 @@ export class ExcessiveExclamationRule extends BaseDetectionRule {
   }
 }
 
-// ─── Rule 15: Risky Attachment ────────────────────────────────────────────────
 export class RiskyAttachmentRule extends BaseDetectionRule {
   readonly id = 'risky_attachment_detected';
   readonly description = 'Email contains executable, script, or high-risk file type';
