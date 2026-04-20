@@ -29,6 +29,8 @@ export class ScoringService {
       Math.max(ipScore, domainScore) + bothHighBonus,
     );
 
+    const tier1Score = authPenalty + reputationScore;
+
     // Tier 2 — Rule score (phishing 70% + spam 30% blend) + behavior score
     let phishingScore = 0;
     let spamScore = 0;
