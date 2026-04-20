@@ -1,5 +1,5 @@
 # SecureMail API Documentation
-
+### By Swilam - (Securemail team leader)❤️
 Base URL: `http://localhost:3000`
 
 All successful responses are wrapped as:
