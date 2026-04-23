@@ -60,6 +60,7 @@
       font-weight: 800;
       letter-spacing: -0.03em;
       line-height: 1.1;
+      margin-bottom: 24px;
     }
 
     .gradient-text {
@@ -76,7 +77,10 @@
     }
 
     section {
-      padding: 120px 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: clamp(60px, 8vh, 120px) 0;
       position: relative;
     }
 
@@ -122,10 +126,10 @@
     #hero {
       min-height: 100vh;
       display: flex;
-      align-items: center;
+      flex-direction: column;
       justify-content: center;
       text-align: center;
-      padding: 120px 0 80px;
+      padding: clamp(80px, 12vh, 120px) 0 80px;
       background-image: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.12) 0%, transparent 60%);
     }
 
@@ -203,7 +207,7 @@
 
     /* --- 3. ARCHITECTURE CORE --- */
     .arch-graph {
-      height: 500px;
+      height: clamp(350px, 45vh, 500px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -224,6 +228,10 @@
     @media (max-width: 768px) {
       .terminal-window { height: 450px; }
       .terminal-output { font-size: 12px; padding: 15px; }
+      .arch-graph { height: auto; flex-direction: column; gap: 16px; padding: 20px 0; }
+      .arch-graph svg { display: none; }
+      .arch-graph .node { position: relative !important; top: auto !important; bottom: auto !important; left: auto !important; right: auto !important; width: 100%; }
+      .node-center { order: -1; }
     }
 
     .terminal-header {
@@ -395,6 +403,7 @@
     /* --- 7. DATABASE SCHEMA --- */
     .schema-view {
       display: grid;
+      
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 20px;
     }
@@ -473,7 +482,8 @@
 
     @media (max-width: 992px) {
       .scalability-grid { grid-template-columns: 1fr; }
-      .schema-view { grid-template-columns: 1fr; }
+      .scaling-card { padding: 24px; }
+      .glass-panel { padding: 24px; }
     }
 
     /* --- Code Snippets --- */
@@ -498,10 +508,6 @@
       .grid-2 {
         grid-template-columns: 1fr;
       }
-
-      section {
-        padding: 80px 0;
-      }
     }
 
     /* --- CINEMATIC SECURITY ENGINE (PREMIUM) --- */
@@ -510,8 +516,7 @@
       min-height: 100vh;
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      padding: 40px 0;
+      padding: clamp(60px, 8vh, 120px) 0;
       overflow: hidden;
       position: relative;
     }
@@ -525,10 +530,25 @@
 
     @media (max-width: 768px) {
       .security-agg-panel { flex-direction: column; align-items: center; gap: 30px; text-align: center; }
-      .security-nodes-row { gap: 10px; flex-wrap: wrap; justify-content: center; }
-      .security-node { width: 15px; height: 15px; }
-      #security-decision-core { width: 100px; height: 100px; margin-left: -50px; margin-top: -50px; }
-      #security-decision-core svg { width: 30px; height: 30px; }
+      .security-pipeline-track { height: 200px; padding: 0 15px; }
+      .security-nodes-row { gap: 6px; justify-content: space-between; }
+      .security-node-label { display: none; }
+      .security-node { gap: 0; }
+      .security-node-circle { width: 8px; height: 8px; border-width: 1px; }
+      
+      #security-packet { width: 26px; height: 26px; margin-top: -13px; }
+      #security-packet svg { width: 14px; height: 14px; }
+      
+      #security-decision-core { width: 80px; height: 80px; right: 10px; margin: 0; transform: translateY(-50%); }
+      .brain-ring.outer { width: 80px; height: 80px; } 
+      .brain-ring.mid { width: 60px; height: 60px; } 
+      .brain-ring.inner { width: 35px; height: 35px; }
+      #security-decision-core svg { width: 24px; height: 24px; }
+      
+      .quarantine-vault { width: 90px; height: 90px; right: -120px; border-width: 1px; border-radius: 16px;}
+      .quarantine-vault.active { right: 5px; }
+      .quarantine-vault svg { width: 30px; height: 30px; }
+      .quarantine-vault span { font-size: 8px; margin-top: 6px; }
     }
 
     .security-agg-item { text-align: center; }
@@ -989,19 +1009,20 @@
       .spec-item { font-size: 10px; }
     }
 
-    /* --- SCROLL-DRIVEN PIPELINE (SCOPED) --- */
+    /* --- PIPELINE CAROUSEL --- */
     #pipeline {
       position: relative;
-      height: 900vh;
-      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: clamp(60px, 8vh, 120px) 0;
       background: #020617;
+      overflow: hidden;
     }
 
     .pipeline-sticky-wrapper {
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      width: 100vw;
+      position: relative;
+      width: 100%;
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -1011,7 +1032,7 @@
     .pipeline-canvas {
       position: relative;
       width: 100%;
-      height: 600px;
+      height: clamp(400px, 60vh, 600px);
       max-width: 1400px;
       margin: 0 auto;
       padding: 0 40px;
@@ -1021,25 +1042,35 @@
       pointer-events: all;
     }
 
+    .pipeline-bottom-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 0 clamp(16px, 5vw, 40px);
+      position: relative;
+      z-index: 1000;
+    }
+
+    @media (max-width: 768px) {
+      .pipeline-bottom-bar {
+        flex-direction: column;
+        gap: 20px;
+        align-items: center;
+      }
+    }
+
     .pipeline-progress-hint {
-      position: absolute;
-      bottom: 40px;
-      left: 50%;
-      transform: translateX(-50%);
       font-family: var(--font-mono);
       font-size: 14px;
       color: var(--text-muted);
-      z-index: 100;
     }
 
     /* --- PIPELINE MANUAL CONTROLS --- */
     .pipeline-nav-controls {
-      position: absolute;
-      bottom: 40px;
-      right: 40px;
       display: flex;
       gap: 12px;
-      z-index: 1000;
     }
 
     .pipeline-nav-btn {
@@ -1123,7 +1154,7 @@
       <span class="badge">The Mission</span>
       <div class="grid-2">
         <div>
-          <h2 style="font-size: 36px; margin-bottom: 24px;">Traditional email security is <span
+          <h2>Traditional email security is <span
               style="color:var(--danger)">broken</span>.</h2>
           <div class="problem-box">
             <p style="font-size: 14px; color: var(--text-muted);">
@@ -1133,7 +1164,7 @@
           </div>
         </div>
         <div>
-          <h2 style="font-size: 36px; margin-bottom: 24px;">SecureMail provides a <span
+          <h2>SecureMail provides a <span
               style="color:var(--success)">unified core</span>.</h2>
           <div class="solution-box">
             <p style="font-size: 14px; color: var(--text-muted);">
@@ -1149,7 +1180,7 @@
   <section id="architecture">
     <div class="container reveal">
       <span class="badge">Architecture Mesh</span>
-      <h2 style="font-size: 44px; margin-bottom: 16px;">Distributed Intelligence</h2>
+      <h2>Distributed Intelligence</h2>
       <p class="hero-desc" style="margin: 0 0 60px;">A decoupled architecture built for resilience and distributed
         analysis.</p>
 
@@ -1193,10 +1224,8 @@
     <div class="pipeline-sticky-wrapper">
       <div class="container reveal">
         <span class="badge">The Security Engine</span>
-        <h2 style="font-size: 44px; margin-bottom: 16px;">The 13-Stage Pipeline</h2>
-
+        <h2>The 13-Stage Pipeline</h2>
       </div>
-
       <div class="pipeline-canvas" id="pipeline-canvas">
         <div class="stage-card">
           <span class="stage-num">01</span>
@@ -1330,11 +1359,12 @@
         </div>
       </div>
 
-      <div class="pipeline-progress-hint" id="pipeline-progress">Step 1 of 13</div>
-
-      <div class="pipeline-nav-controls">
-        <button class="pipeline-nav-btn" id="pipeline-prev">← Back</button>
-        <button class="pipeline-nav-btn" id="pipeline-next">Next →</button>
+      <div class="pipeline-bottom-bar">
+        <div class="pipeline-progress-hint" id="pipeline-progress">Step 1 of 13</div>
+        <div class="pipeline-nav-controls">
+          <button class="pipeline-nav-btn" id="pipeline-prev">← Back</button>
+          <button class="pipeline-nav-btn" id="pipeline-next">Next →</button>
+        </div>
       </div>
     </div>
   </section>
@@ -1342,7 +1372,7 @@
   <section id="attack-simulation" class="security-theatre-section">
     <div class="security-header container">
       <span class="badge">Live Security Engine</span>
-      <h2 style="font-size: 44px; margin-bottom: 24px;">Cinematic <span class="gradient-text">Attack Neutralization</span></h2>
+      <h2>Cinematic <span class="gradient-text">Attack Neutralization</span></h2>
       <p style="color:var(--text-muted); max-width: 600px; margin: 0 auto;">Visualizing the real-time deterministic security pipeline as it processes and neutralizes high-severity threats.</p>
     </div>
 
@@ -1414,7 +1444,7 @@
   <section id="schema">
     <div class="container reveal">
       <span class="badge">Logical Data Model</span>
-      <h2 style="font-size: 40px; margin-bottom: 40px;">Prisma Schema Core</h2>
+      <h2>Prisma Schema Core</h2>
       <div class="schema-view">
         <div class="model-card">
           <h4>User</h4>
@@ -1450,7 +1480,7 @@
   <section id="scalability">
     <div class="container reveal">
       <span class="badge">Orchestration & Performance</span>
-      <h2 style="font-size: 40px; margin-bottom: 20px;">Built for <span class="gradient-text">Massive Throughput</span></h2>
+      <h2>Built for <span class="gradient-text">Massive Throughput</span></h2>
       <p style="color:var(--text-muted); max-width: 700px; margin-bottom: 60px;">The backend architecture is designed to handle thousands of concurrent analysis pipelines with deterministic latency.</p>
       
       <div class="scalability-grid">
@@ -1503,7 +1533,7 @@
 
   <footer>
     <div class="container reveal">
-      <h2 style="font-size: 48px; margin-bottom: 24px;">Built for the <br /><span class="gradient-text">Future of
+      <h2>Built for the <br /><span class="gradient-text">Future of
           Privacy</span></h2>
       <p style="color:var(--text-muted); max-width: 600px; margin: 0 auto 40px;">
         SecureMail Backend is a production-ready infrastructure that respects user privacy while maintaining a hardened
@@ -1590,6 +1620,7 @@
         this.packet = document.getElementById('security-packet');
         this.brain = document.getElementById('security-decision-core');
         this.vault = document.getElementById('security-vault');
+        this.currentStep = -1;
         this.initNodes();
       }
 
@@ -1606,37 +1637,54 @@
 
       async run() {
         if (this.isRunning) return;
-        this.reset();
         this.isRunning = true;
         
-        this.packet.style.display = 'flex';
-        this.packet.style.opacity = '0';
-        this.packet.style.left = '-100px';
-        this.packet.style.transform = 'rotate(-10deg) scale(0.8)';
-        
-        await new Promise(r => setTimeout(r, 100));
-        this.packet.style.opacity = '1';
-        this.packet.style.left = '50px';
-        this.packet.style.transform = 'rotate(0deg) scale(1)';
-        
-        await new Promise(r => setTimeout(r, 1200));
-
-        for (let i = 0; i < this.STAGES.length; i++) {
-          await this.processStage(i);
+        if (this.currentStep === -1) {
+          this.packet.style.display = 'flex';
+          this.packet.style.opacity = '0';
+          this.packet.style.left = '-100px';
+          this.packet.style.transform = 'rotate(-10deg) scale(0.8)';
+          
+          await new Promise(r => setTimeout(r, 100));
+          this.packet.style.opacity = '1';
+          this.packet.style.left = '10px';
+          this.packet.style.transform = 'rotate(0deg) scale(1)';
+          
+          await new Promise(r => setTimeout(r, 600));
+          this.currentStep = 0;
+          await this.processStage(0);
+          document.getElementById('run-simulation-btn').innerText = 'Next Stage →';
+          this.isRunning = false;
+          return;
         }
 
-        await this.triggerVaultOutcome();
+        this.currentStep++;
+        
+        if (this.currentStep < this.STAGES.length) {
+          await this.processStage(this.currentStep);
+        } else {
+          await this.triggerVaultOutcome();
+          document.getElementById('run-simulation-btn').innerText = 'Simulation Complete';
+          document.getElementById('run-simulation-btn').style.opacity = '0.5';
+          document.getElementById('run-simulation-btn').style.pointerEvents = 'none';
+        }
+        
         this.isRunning = false;
       }
 
       async processStage(idx) {
         const stage = this.STAGES[idx];
         const node = document.getElementById(`sec-node-${stage.id}`);
+        const nodeCircle = document.querySelector(`#sec-node-${stage.id} .security-node-circle`);
         
         document.getElementById('sec-agg-stage').innerText = stage.label.toUpperCase();
         
-        const percent = (idx / (this.STAGES.length - 1)) * 100;
-        this.packet.style.left = `calc(${percent}% + ${idx < 6 ? 50 : -180}px)`;
+        const trackRect = document.getElementById('security-theatre').getBoundingClientRect();
+        const circleRect = nodeCircle.getBoundingClientRect();
+        
+        const centerLeft = (circleRect.left - trackRect.left) + (circleRect.width / 2);
+        const packetWidth = this.packet.offsetWidth || 48;
+        this.packet.style.left = `${centerLeft - (packetWidth / 2)}px`;
 
         node.classList.add('processing');
         await new Promise(r => setTimeout(r, 600));
@@ -1679,8 +1727,8 @@
           document.body.appendChild(p);
 
           const coreRect = this.brain.getBoundingClientRect();
-          const destX = coreRect.left + 70 - (rect.left + 7);
-          const destY = coreRect.top + 70 - rect.top;
+          const destX = coreRect.left + (coreRect.width / 2) - (rect.left + (rect.width / 2));
+          const destY = coreRect.top + (coreRect.height / 2) - rect.top;
 
           p.animate([
             { transform: 'translate(0, 0) scale(1)', opacity: 1 },
@@ -1754,12 +1802,18 @@
       reset() {
         this.score = 0;
         this.isRunning = false;
+        this.currentStep = -1;
         this.packet.style.display = 'none';
         this.packet.style.background = 'var(--primary)';
         this.packet.style.boxShadow = '0 0 40px var(--primary-glow)';
         this.packet.style.left = '0%';
         this.packet.style.opacity = '1';
         
+        const btn = document.getElementById('run-simulation-btn');
+        btn.innerText = 'Run Threat Simulation';
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'all';
+
         document.getElementById('sec-agg-stage').innerText = 'IDLE';
         document.getElementById('sec-agg-score').innerText = '0%';
         document.getElementById('sec-agg-score').classList.remove('danger');
@@ -1796,20 +1850,14 @@
         this.targetProgress = 0;
         this.smoothedProgress = 0;
         this.time = 0;
+        this.currentIndex = 0;
 
-        this.bindEvents();
         this.tick();
       }
 
-      bindEvents() {
-        window.addEventListener('scroll', () => {
-          const rect = this.section.getBoundingClientRect();
-          const sectionHeight = rect.height;
-          const viewHeight = window.innerHeight;
-
-          let progress = -rect.top / (sectionHeight - viewHeight);
-          this.targetProgress = Math.max(0, Math.min(0.999, progress));
-        });
+      goToIndex(idx) {
+        this.currentIndex = Math.max(0, Math.min(this.totalStages - 1, idx));
+        this.targetProgress = this.currentIndex / (this.totalStages - 1);
       }
 
       tick() {
@@ -1939,31 +1987,13 @@
 
       // Bind Navigation Buttons after initialization
       document.getElementById('pipeline-next').addEventListener('click', () => {
-        const nextIdx = Math.min(pipelineController.totalStages - 1, Math.round(pipelineController.targetProgress * (pipelineController.totalStages - 1)) + 1);
-        pipelineController.goToStage(nextIdx);
+        pipelineController.goToIndex(pipelineController.currentIndex + 1);
       });
 
       document.getElementById('pipeline-prev').addEventListener('click', () => {
-        const prevIdx = Math.max(0, Math.round(pipelineController.targetProgress * (pipelineController.totalStages - 1)) - 1);
-        pipelineController.goToStage(prevIdx);
+        pipelineController.goToIndex(pipelineController.currentIndex - 1);
       });
     });
-
-    // Add goToStage method to PipelineController prototype
-    PipelineController.prototype.goToStage = function (index) {
-      const rect = this.section.getBoundingClientRect();
-      const scrollY = window.scrollY;
-      const sectionTop = scrollY + rect.top;
-      const sectionHeight = rect.height;
-      const viewHeight = window.innerHeight;
-      const scrollableHeight = sectionHeight - viewHeight;
-
-      const targetY = sectionTop + (index / (this.totalStages - 1)) * scrollableHeight;
-      window.scrollTo({
-        top: targetY,
-        behavior: 'smooth'
-      });
-    };
   </script>
 </body>
 
