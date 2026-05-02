@@ -9,6 +9,8 @@ import * as bcrypt from 'bcrypt';
 import { ThemeMode, NotificationType } from '@prisma/client';
 import { EditProfileDto } from './dto/edit-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ThemeModeDto } from './dto/theme-mode.dto';
+import { UpdateNotificationsDto } from './dto/update-notifications.dto';
 import { StorageService } from './storage.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { generateSecret, generateURI, verifySync } from 'otplib';
@@ -45,7 +47,9 @@ export class UserSettingsService {
     return {
       user: {
         ...user,
-        avatar: user.avatar ? `/uploads/${user.avatar}` : null,
+        avatar: user.avatar 
+          ? (user.avatar.startsWith('http') ? user.avatar : `/uploads/${user.avatar}`) 
+          : null,
       },
       settings: settings
         ? {
@@ -96,7 +100,9 @@ export class UserSettingsService {
 
     return {
       ...updated,
-      avatar: updated.avatar ? `/uploads/${updated.avatar}` : null,
+      avatar: updated.avatar 
+        ? (updated.avatar.startsWith('http') ? updated.avatar : `/uploads/${updated.avatar}`) 
+        : null,
     };
   }
 
@@ -151,6 +157,20 @@ export class UserSettingsService {
     });
 
     return { themeMode };
+  }
+
+  async updateNotificationsEnabled(userId: number, notificationsEnabled: boolean) {
+    await this.prisma.userSetting.upsert({
+      where: { userId },
+      create: {
+        userId,
+        themeMode: ThemeMode.LIGHT,
+        notificationsEnabled,
+      },
+      update: { notificationsEnabled },
+    });
+
+    return { notificationsEnabled };
   }
 
   async setup2FA(userId: number) {

@@ -25,6 +25,17 @@ export class NotificationsService {
   ) {}
 
   async create(input: CreateNotificationInput) {
+    // Respect the user's notification preference
+    const setting = await this.prisma.userSetting.findUnique({
+      where: { userId: input.userId },
+      select: { notificationsEnabled: true },
+    });
+
+    // If the setting row exists and notifications are explicitly disabled, skip
+    if (setting && !setting.notificationsEnabled) {
+      return null;
+    }
+
     const notification = await this.prisma.notification.create({
       data: {
         userId: input.userId,

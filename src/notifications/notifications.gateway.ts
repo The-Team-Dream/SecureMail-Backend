@@ -11,7 +11,10 @@ import { JwtService } from '@nestjs/jwt';
 const USER_ROOM_PREFIX = 'user:';
 
 @WebSocketGateway({
-  cors: { origin: '*' },
+  cors: {
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:3001',
+    credentials: true,
+  },
   namespace: '/',
 })
 export class NotificationsGateway

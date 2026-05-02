@@ -44,7 +44,10 @@ import { SecurityModule }     from '../security/security.module';
   providers: [
     MailboxesService,
     EmailSyncService,
-    EmailSyncProcessor,
+    {
+      provide:  EmailSyncProcessor,
+      useClass: EmailSyncProcessor,
+    },
     EmailSyncScheduler,
     GmailProvider,
     OutlookProvider,

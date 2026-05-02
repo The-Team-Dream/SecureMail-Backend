@@ -68,7 +68,7 @@ import { SecurityTestModule } from './security/security-test.module';
     MalwareModule,
     ProtoModule,
     SecurityModule,
-    SecurityTestModule
+    ...(process.env.NODE_ENV !== 'production' ? [SecurityTestModule] : [])
   ],
   controllers: [AppController],
   providers: [

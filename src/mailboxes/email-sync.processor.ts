@@ -25,8 +25,9 @@ import { MailboxesService }         from './mailboxes.service';
 import { SecurityService, SecurityPipelineInput } from '../security/security.service';
 import { EmailProviders, FolderType, SyncStatus, NotificationType } from '@prisma/client';
 import { google }                   from 'googleapis';
+import { QUEUE_EMAIL_SYNC }         from '../common/constants/queues';
 
-export const EMAIL_SYNC_QUEUE = 'email-sync';
+export const EMAIL_SYNC_QUEUE = QUEUE_EMAIL_SYNC;
 
 const DEFAULT_STORAGE_LIMIT_BYTES = 1073741824; // 1GB
 
@@ -47,7 +48,7 @@ interface NormalizedEmailData {
   isSpam:     boolean;
 }
 
-@Processor(EMAIL_SYNC_QUEUE)
+@Processor(EMAIL_SYNC_QUEUE, { concurrency: 5 })
 @Injectable()
 export class EmailSyncProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailSyncProcessor.name);

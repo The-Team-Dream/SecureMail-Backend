@@ -4,8 +4,10 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma.service';
 import { EmailProviders } from '@prisma/client';
 import { FolderType } from '@prisma/client';
+import { QUEUE_EMAIL_SYNC } from '../common/constants/queues';
 
-export const EMAIL_SYNC_QUEUE = 'email-sync';
+// Re-exported for backward compatibility with existing imports
+export const EMAIL_SYNC_QUEUE = QUEUE_EMAIL_SYNC;
 
 @Injectable()
 export class EmailSyncService {

@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  StreamableFile,
 } from '@nestjs/common';
+import { createReadStream, existsSync } from 'fs';
 import { PrismaService } from '../../prisma.service';
 import { FolderType } from '@prisma/client';
 import { ReportType } from './dto/report-email.dto';
@@ -76,6 +78,120 @@ export class EmailsService {
       }),
       this.prisma.email.count({
         where: { mailBoxId: mailboxId, folderId: folder.id },
+      }),
+    ]);
+
+    return {
+      data: emails,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async listStarred(
+    userId: number,
+    mailboxId: number,
+    page: number,
+    limit: number,
+  ) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+
+    const skip = (page - 1) * limit;
+    const [emails, total] = await Promise.all([
+      this.prisma.email.findMany({
+        where: { mailBoxId: mailboxId, isFlagged: true },
+        orderBy: { receivedAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          subject: true,
+          fromAddr: true,
+          fromName: true,
+          toAddr: true,
+          isRead: true,
+          isFlagged: true,
+          isSpam: true,
+          isPhishing: true,
+          receivedAt: true,
+          spamScore: true,
+          phishingScore: true,
+          malwareVerdict: true,
+          malwareScore: true,
+          malwareSeverity: true,
+          folder: { select: { id: true, type: true } },
+        },
+      }),
+      this.prisma.email.count({
+        where: { mailBoxId: mailboxId, isFlagged: true },
+      }),
+    ]);
+
+    return {
+      data: emails,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async search(
+    userId: number,
+    mailboxId: number,
+    q: string | undefined,
+    page: number,
+    limit: number,
+  ) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+
+    const skip = (page - 1) * limit;
+    
+    // If no query provided, just return all emails in mailbox
+    const whereClause: any = { mailBoxId: mailboxId };
+    
+    if (q && q.trim().length > 0) {
+      const searchStr = q.trim();
+      whereClause.OR = [
+        { subject: { contains: searchStr, mode: 'insensitive' } },
+        { fromAddr: { contains: searchStr, mode: 'insensitive' } },
+        { fromName: { contains: searchStr, mode: 'insensitive' } },
+      ];
+    }
+
+    const [emails, total] = await Promise.all([
+      this.prisma.email.findMany({
+        where: whereClause,
+        orderBy: { receivedAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          subject: true,
+          fromAddr: true,
+          fromName: true,
+          toAddr: true,
+          isRead: true,
+          isFlagged: true,
+          isSpam: true,
+          isPhishing: true,
+          receivedAt: true,
+          spamScore: true,
+          phishingScore: true,
+          malwareVerdict: true,
+          malwareScore: true,
+          malwareSeverity: true,
+          folder: { select: { id: true, type: true } },
+        },
+      }),
+      this.prisma.email.count({
+        where: whereClause,
       }),
     ]);
 
@@ -258,5 +374,44 @@ export class EmailsService {
       });
     }
     return folder;
+  }
+
+  async downloadAttachment(
+    userId: number,
+    mailboxId: number,
+    emailId: number,
+    attachmentId: number,
+  ) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+    
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { 
+        id: attachmentId, 
+        emailId: emailId,
+        email: { mailBoxId: mailboxId }
+      },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    // If it's a Cloudinary URL or remote URL, return redirect directive
+    if (attachment.storagePath.startsWith('http://') || attachment.storagePath.startsWith('https://')) {
+      return { url: attachment.storagePath, type: 'redirect' };
+    }
+
+    // Otherwise, treat as local file path
+    if (!existsSync(attachment.storagePath)) {
+      throw new NotFoundException('Attachment file not found on disk');
+    }
+
+    const file = createReadStream(attachment.storagePath);
+    return {
+      type: 'stream',
+      file: new StreamableFile(file),
+      filename: attachment.filename ?? 'attachment',
+      mimeType: attachment.mimeType,
+    };
   }
 }

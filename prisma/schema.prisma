@@ -284,6 +284,9 @@ model SyncLog {
   status       SyncStatus
   errorMessage String?
   syncedAt     DateTime
+
+  @@index([status])
+  @@index([syncedAt])
 }
 
 enum SyncStatus {

@@ -184,6 +184,9 @@ export class AdminUsersService {
       data: { deletedAt: new Date(), bannedAt: null },
     });
 
+    // Revoke all active sessions so existing JWTs are immediately invalidated
+    await this.sessionsService.revokeAllSessionsForUser(userId);
+
     await this.auditLog.log({
       adminId,
       action: 'USER_DELETED',

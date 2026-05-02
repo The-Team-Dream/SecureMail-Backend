@@ -1,13 +1,17 @@
 # SecureMail API Documentation
+
 ### By Swilam - (Securemail team leader)❤️
+
 Base URL: `http://localhost:3000`
 
 All successful responses are wrapped as:
+
 ```json
 { "success": true, "message": "Request successful", "data": { ... } }
 ```
- 
+
 All error responses follow:
+
 ```json
 { "success": false, "statusCode": 400, "message": "...", "errors": [...], "path": "...", "timestamp": "..." }
 ```
@@ -18,95 +22,102 @@ All error responses follow:
 
 ## Endpoints Overview
 
-|#| Method | Endpoint | Description | Auth |
-|-|--------|----------|-------------|------|
-|1| GET | `/health` | Liveness check | ❌ |
-|2| POST | `/auth/register` | Register new account | ❌ |
-|3| POST | `/auth/verify-register-otp` | Verify registration OTP | ❌ |
-|4| POST | `/auth/login` | Login with email & password | ❌ |
-|5| POST | `/auth/verify-2fa` | Complete 2FA login | ❌ |
-|6| POST | `/auth/logout` | Invalidate current session | 🔒 |
-|7| POST | `/auth/forget-password` | Request password reset email | ❌ |
-|8| POST | `/auth/reset-password` | Set new password via reset token | ❌ |
-|9| GET | `/auth/google/login` | Start Google OAuth | ❌ |
-|10| GET | `/auth/google/callback` | Google OAuth callback | ❌ |
-|11| GET | `/sessions` | List active sessions | 🔒 |
-|12| DELETE | `/sessions` | Revoke all sessions except current | 🔒 |
-|13| DELETE | `/sessions/:id` | Revoke specific session | 🔒 |
-|14| GET | `/notifications` | Get paginated notifications | 🔒 |
-|15| GET | `/notifications/unread-count` | Get unread notifications count | 🔒 |
-|16| PATCH | `/notifications/read-all` | Mark all notifications as read | 🔒 |
-|17| PATCH | `/notifications/:id/read` | Mark notification as read | 🔒 |
-|18| DELETE | `/notifications/:id` | Delete notification | 🔒 |
-|19| GET | `/user/profile` | Get current user profile | 🔒 |
-|20| GET | `/mailboxes` | List all connected mailboxes | 🔒 |
-|21| GET | `/mailboxes/:id` | Get mailbox by ID | 🔒 |
-|22| PATCH | `/mailboxes/:id` | Update mailbox settings | 🔒 |
-|23| DELETE | `/mailboxes/:id` | Disconnect mailbox | 🔒 |
-|24| POST | `/mailboxes/:id/sync` | Trigger manual sync | 🔒 |
-|25| GET | `/mailboxes/:id/reports` | Get spam + phishing report | 🔒 |
-|26| GET | `/mailboxes/gmail/auth-url` | Get Gmail OAuth2 URL | 🔒 |
-|27| POST | `/mailboxes/gmail` | Connect Gmail via OAuth2 | 🔒 |
-|28| GET | `/mailboxes/outlook/auth-url` | Get Outlook OAuth2 URL | 🔒 |
-|29| POST | `/mailboxes/outlook` | Connect Outlook via OAuth2 | 🔒 |
-|30| POST | `/mailboxes/imap` | Connect custom email via IMAP | 🔒 |
-|31| GET | `/mailboxes/:mailboxId/inbox` | List inbox emails | 🔒 |
-|32| GET | `/mailboxes/:mailboxId/sent` | List sent emails | 🔒 |
-|33| GET | `/mailboxes/:mailboxId/spam` | List spam emails | 🔒 |
-|34| GET | `/mailboxes/:mailboxId/phishing` | List phishing emails | 🔒 |
-|35| GET | `/mailboxes/:mailboxId/emails/:id` | Get full email details | 🔒 |
-|36| DELETE | `/mailboxes/:mailboxId/emails/:id` | Delete email | 🔒 |
-|37| PATCH | `/mailboxes/:mailboxId/emails/:id/read` | Mark email read/unread | 🔒 |
-|38| POST | `/mailboxes/:mailboxId/emails/:id/report` | Report as spam or phishing | 🔒 |
-|39| PATCH | `/mailboxes/:mailboxId/emails/:id/reclassify` | Move email to correct folder | 🔒 |
-|40| POST | `/mailboxes/:mailboxId/send` | Send new email | 🔒 |
-|41| POST | `/mailboxes/:mailboxId/emails/:id/reply` | Reply to email | 🔒 |
-|42| POST | `/mailboxes/:mailboxId/emails/:id/forward` | Forward email | 🔒 |
-|43| GET | `/analytics/overview` | Overall stats across all mailboxes | 🔒 |
-|44| GET | `/analytics/mailboxes/:mailboxId` | Per-mailbox statistics | 🔒 |
-|45| GET | `/analytics/activity` | Email activity over time | 🔒 |
-|46| GET | `/user-settings` | Get user settings bundle | 🔒 |
-|47| PATCH | `/user-settings/profile` | Update profile & avatar | 🔒 |
-|48| PATCH | `/user-settings/password` | Change password | 🔒 |
-|49| PATCH | `/user-settings/theme` | Set theme mode | 🔒 |
-|50| POST | `/user-settings/2fa/setup` | Start 2FA setup | 🔒 |
-|51| POST | `/user-settings/2fa/enable` | Enable 2FA | 🔒 |
-|52| POST | `/user-settings/2fa/disable` | Disable 2FA | 🔒 |
-|53| GET | `/admin/users` | Paginated list of all users | 🔒 |
-|54| GET | `/admin/users/:id` | Full user details | 🔒 |
-|55| DELETE | `/admin/users/:id` | Soft delete user | 🔒 |
-|56| PATCH | `/admin/users/:id/ban` | Ban user | 🔒 |
-|57| PATCH | `/admin/users/:id/unban` | Unban user | 🔒 |
-|58| GET | `/admin/users/:id/sessions` | View user sessions | 🔒 |
-|59| DELETE | `/admin/users/:id/sessions` | Revoke all user sessions | 🔒 |
-|60| GET | `/admin/users/:id/mailboxes` | View user mailboxes | 🔒 |
-|61| GET | `/admin/users/:id/notifications` | View user notifications | 🔒 |
-|62| GET | `/admin/stats/overview` | System-wide overview stats | 🔒 |
-|63| GET | `/admin/stats/activity` | Activity over last 30 days | 🔒 |
-|64| GET | `/admin/emails` | All emails with filters | 🔒 |
-|65| GET | `/admin/emails/:id` | Full email details | 🔒 |
-|66| GET | `/admin/emails/phishing` | List phishing emails | 🔒 |
-|67| GET | `/admin/emails/spam` | List spam emails | 🔒 |
-|68| GET | `/admin/mailboxes` | All mailboxes | 🔒 |
-|69| GET | `/admin/mailboxes/:id` | Mailbox details with stats | 🔒 |
-|70| DELETE | `/admin/mailboxes/:id` | Force disconnect mailbox | 🔒 |
-|71| GET | `/admin/notifications` | All notifications | 🔒 |
-|72| POST | `/admin/notifications/broadcast` | Broadcast notification to users | 🔒 |
-|73| DELETE | `/admin/notifications/:id` | Delete any notification | 🔒 |
-|74| GET | `/admin/audit-logs` | Audit logs with filters | 🔒 |
-|75| GET | `/admin/audit-logs/:adminId` | Audit logs for specific admin | 🔒 |
-|76| GET | `/admin/dashboard` | Dashboard summary | 🔒 |
-|77| POST | `/security-test/analyze` | Run pipeline on custom payload | ❌ |
-|78| POST | `/security-test/analyze/phishing` | Run phishing scenario | ❌ |
-|79| POST | `/security-test/analyze/bec` | Run BEC scenario | ❌ |
-|80| POST | `/security-test/analyze/malware` | Run malware scenario | ❌ |
-|81| POST | `/security-test/analyze/spam` | Run spam scenario | ❌ |
-|82| POST | `/security-test/analyze/clean` | Run clean email scenario | ❌ |
-|83| GET | `/security-test/cache/stats` | Get cache statistics | ❌ |
-|84| POST | `/security-test/cache/invalidate` | Invalidate cache entry | ❌ |
-|85| POST | `/security-test/intel/url` | Lookup URL reputation | ❌ |
-|86| POST | `/security-test/intel/ip` | Lookup IP reputation | ❌ |
-|87| POST | `/security-test/intel/domain` | Lookup domain reputation | ❌ |
+| #   | Method | Endpoint                                      | Description                        | Auth |
+| --- | ------ | --------------------------------------------- | ---------------------------------- | ---- |
+| 1   | GET    | `/health`                                     | Liveness check                     | ❌   |
+| 2   | POST   | `/auth/register`                              | Register new account               | ❌   |
+| 3   | POST   | `/auth/verify-register-otp`                   | Verify registration OTP            | ❌   |
+| 4   | POST   | `/auth/resend-otp`                            | Resend registration OTP            | ❌   |
+| 5   | POST   | `/auth/login`                                 | Login with email & password        | ❌   |
+| 6   | POST   | `/auth/verify-2fa`                            | Complete 2FA login                 | ❌   |
+| 7   | POST   | `/auth/logout`                                | Invalidate current session         | 🔒   |
+| 8   | POST   | `/auth/forget-password`                       | Request password reset email       | ❌   |
+| 9   | POST   | `/auth/reset-password`                        | Set new password via reset token   | ❌   |
+| 10  | GET    | `/auth/google/login`                          | Start Google OAuth                 | ❌   |
+| 11  | GET    | `/auth/google/callback`                       | Google OAuth callback              | ❌   |
+| 12  | GET    | `/sessions`                                   | List active sessions               | 🔒   |
+| 13  | DELETE | `/sessions`                                   | Revoke all sessions except current | 🔒   |
+| 14  | DELETE | `/sessions/:id`                               | Revoke specific session            | 🔒   |
+| 15  | GET    | `/notifications`                              | Get paginated notifications        | 🔒   |
+| 16  | GET    | `/notifications/unread-count`                 | Get unread notifications count     | 🔒   |
+| 17  | PATCH  | `/notifications/read-all`                     | Mark all notifications as read     | 🔒   |
+| 18  | PATCH  | `/notifications/:id/read`                     | Mark notification as read          | 🔒   |
+| 19  | DELETE | `/notifications/:id`                          | Delete notification                | 🔒   |
+| 20  | GET    | `/user/profile`                               | Get current user profile           | 🔒   |
+| 21  | GET    | `/mailboxes`                                  | List all connected mailboxes       | 🔒   |
+| 22  | GET    | `/mailboxes/:id`                              | Get mailbox by ID                  | 🔒   |
+| 23  | PATCH  | `/mailboxes/:id`                              | Update mailbox settings            | 🔒   |
+| 24  | DELETE | `/mailboxes/:id`                              | Disconnect mailbox                 | 🔒   |
+| 25  | POST   | `/mailboxes/:id/sync`                         | Trigger manual sync                | 🔒   |
+| 26  | GET    | `/mailboxes/:id/reports`                      | Get spam + phishing report         | 🔒   |
+| 27  | GET    | `/mailboxes/gmail/auth-url`                   | Get Gmail OAuth2 URL               | 🔒   |
+| 28  | POST   | `/mailboxes/gmail`                            | Connect Gmail via OAuth2           | 🔒   |
+| 29  | GET    | `/mailboxes/outlook/auth-url`                 | Get Outlook OAuth2 URL             | 🔒   |
+| 30  | POST   | `/mailboxes/outlook`                          | Connect Outlook via OAuth2         | 🔒   |
+| 31  | POST   | `/mailboxes/imap`                             | Connect custom email via IMAP      | 🔒   |
+| 32  | GET    | `/mailboxes/:mailboxId/inbox`                 | List inbox emails                  | 🔒   |
+| 33  | GET    | `/mailboxes/:mailboxId/sent`                  | List sent emails                   | 🔒   |
+| 34  | GET    | `/mailboxes/:mailboxId/spam`                  | List spam emails                   | 🔒   |
+| 35  | GET    | `/mailboxes/:mailboxId/phishing`              | List phishing emails               | 🔒   |
+| 36  | GET    | `/mailboxes/:mailboxId/starred`               | List starred emails                | 🔒   |
+| 37  | GET    | `/mailboxes/:mailboxId/malware`               | List malware emails                | 🔒   |
+| 38  | GET    | `/mailboxes/:mailboxId/trash`                 | List deleted emails                | 🔒   |
+| 39  | GET    | `/mailboxes/:mailboxId/search`                | Search emails                      | 🔒   |
+| 40  | GET    | `/mailboxes/:mailboxId/emails/:id`            | Get full email details             | 🔒   |
+| 41  | GET    | `/mailboxes/:mailboxId/emails/:id/attachments/:attachmentId/download` | Download attachment | 🔒 |
+| 42  | DELETE | `/mailboxes/:mailboxId/emails/:id`            | Delete email                       | 🔒   |
+| 43  | PATCH  | `/mailboxes/:mailboxId/emails/:id/read`       | Mark email read/unread             | 🔒   |
+| 44  | POST   | `/mailboxes/:mailboxId/emails/:id/report`     | Report as spam or phishing         | 🔒   |
+| 45  | PATCH  | `/mailboxes/:mailboxId/emails/:id/reclassify` | Move email to correct folder       | 🔒   |
+| 46  | POST   | `/mailboxes/:mailboxId/send`                  | Send new email                     | 🔒   |
+| 47  | POST   | `/mailboxes/:mailboxId/emails/:id/reply`      | Reply to email                     | 🔒   |
+| 48  | POST   | `/mailboxes/:mailboxId/emails/:id/forward`    | Forward email                      | 🔒   |
+| 49  | GET    | `/analytics/overview`                         | Overall stats across all mailboxes | 🔒   |
+| 50  | GET    | `/analytics/mailboxes/:mailboxId`             | Per-mailbox statistics             | 🔒   |
+| 51  | GET    | `/analytics/activity`                         | Email activity over time           | 🔒   |
+| 52  | GET    | `/user-settings`                              | Get user settings bundle           | 🔒   |
+| 53  | PATCH  | `/user-settings/profile`                      | Update profile & avatar            | 🔒   |
+| 54  | PATCH  | `/user-settings/notifications`                | Toggle push notifications          | 🔒   |
+| 55  | PATCH  | `/user-settings/password`                     | Change password                    | 🔒   |
+| 56  | PATCH  | `/user-settings/theme`                        | Set theme mode                     | 🔒   |
+| 57  | POST   | `/user-settings/2fa/setup`                    | Start 2FA setup                    | 🔒   |
+| 58  | POST   | `/user-settings/2fa/enable`                   | Enable 2FA                         | 🔒   |
+| 59  | POST   | `/user-settings/2fa/disable`                  | Disable 2FA                        | 🔒   |
+| 60  | GET    | `/admin/users`                                | Paginated list of all users        | 🔒   |
+| 61  | GET    | `/admin/users/:id`                            | Full user details                  | 🔒   |
+| 62  | DELETE | `/admin/users/:id`                            | Soft delete user                   | 🔒   |
+| 63  | PATCH  | `/admin/users/:id/ban`                        | Ban user                           | 🔒   |
+| 64  | PATCH  | `/admin/users/:id/unban`                      | Unban user                         | 🔒   |
+| 65  | GET    | `/admin/users/:id/sessions`                   | View user sessions                 | 🔒   |
+| 66  | DELETE | `/admin/users/:id/sessions`                   | Revoke all user sessions           | 🔒   |
+| 67  | GET    | `/admin/users/:id/mailboxes`                  | View user mailboxes                | 🔒   |
+| 68  | GET    | `/admin/users/:id/notifications`              | View user notifications            | 🔒   |
+| 69  | GET    | `/admin/stats/overview`                       | System-wide overview stats         | 🔒   |
+| 70  | GET    | `/admin/stats/activity`                       | Activity over last 30 days         | 🔒   |
+| 71  | GET    | `/admin/emails`                               | All emails with filters            | 🔒   |
+| 72  | GET    | `/admin/emails/:id`                           | Full email details                 | 🔒   |
+| 73  | GET    | `/admin/emails/phishing`                      | List phishing emails               | 🔒   |
+| 74  | GET    | `/admin/emails/spam`                          | List spam emails                   | 🔒   |
+| 75  | GET    | `/admin/mailboxes`                            | All mailboxes                      | 🔒   |
+| 76  | GET    | `/admin/mailboxes/:id`                        | Mailbox details with stats         | 🔒   |
+| 77  | DELETE | `/admin/mailboxes/:id`                        | Force disconnect mailbox           | 🔒   |
+| 78  | GET    | `/admin/notifications`                        | All notifications                  | 🔒   |
+| 79  | POST   | `/admin/notifications/broadcast`              | Broadcast notification to users    | 🔒   |
+| 80  | DELETE | `/admin/notifications/:id`                    | Delete any notification            | 🔒   |
+| 81  | GET    | `/admin/audit-logs`                           | Audit logs with filters            | 🔒   |
+| 82  | GET    | `/admin/audit-logs/:adminId`                  | Audit logs for specific admin      | 🔒   |
+| 83  | GET    | `/admin/dashboard`                            | Dashboard summary                  | 🔒   |
+| 84  | POST   | `/security-test/analyze`                      | Run pipeline on custom payload     | ❌   |
+| 85  | POST   | `/security-test/analyze/phishing`             | Run phishing scenario              | ❌   |
+| 86  | POST   | `/security-test/analyze/bec`                  | Run BEC scenario                   | ❌   |
+| 87  | POST   | `/security-test/analyze/malware`              | Run malware scenario               | ❌   |
+| 88  | POST   | `/security-test/analyze/spam`                 | Run spam scenario                  | ❌   |
+| 89  | POST   | `/security-test/analyze/clean`                | Run clean email scenario           | ❌   |
+| 90  | GET    | `/security-test/cache/stats`                  | Get cache statistics               | ❌   |
+| 91  | POST   | `/security-test/cache/invalidate`             | Invalidate cache entry             | ❌   |
+| 92  | POST   | `/security-test/intel/url`                    | Lookup URL reputation              | ❌   |
+| 93  | POST   | `/security-test/intel/ip`                     | Lookup IP reputation               | ❌   |
+| 94  | POST   | `/security-test/intel/domain`                 | Lookup domain reputation           | ❌   |
 
 ---
 
@@ -135,9 +146,11 @@ All error responses follow:
 ## Health
 
 ### `GET /health`
+
 Liveness check.
 
 **Response `200`:**
+
 ```json
 { "success": true, "message": "Request successful", "data": "SecureMail API" }
 ```
@@ -147,6 +160,7 @@ Liveness check.
 ## Auth
 
 ### `POST /auth/register`
+
 Register a new local account. Sends OTP to email.
 
 **Request Body:**
@@ -158,6 +172,7 @@ Register a new local account. Sends OTP to email.
 | username | string | ✅ | 3-20 characters |
 
 **Response `201`:**
+
 ```json
 { "data": { "message": "OTP sent to your email" } }
 ```
@@ -165,6 +180,7 @@ Register a new local account. Sends OTP to email.
 ---
 
 ### `POST /auth/verify-register-otp`
+
 Verify the OTP sent during registration.
 
 **Request Body:**
@@ -174,13 +190,34 @@ Verify the OTP sent during registration.
 | otp | string | ✅ | 6-digit OTP |
 
 **Response `200`:**
+
 ```json
 { "data": { "message": "Account verified successfully" } }
 ```
 
 ---
 
+### `POST /auth/resend-otp`
+
+Resend registration OTP.
+- **Rate Limit:** 1 request per 60s per email.
+- **Security:** Returns generic message to prevent user enumeration.
+
+**Request Body:**
+| Field | Type | Required |
+|-------|------|----------|
+| email | string | ✅ |
+
+**Response `200`:**
+
+```json
+{ "data": { "message": "If account is pending, new OTP has been sent." } }
+```
+
+---
+
 ### `POST /auth/login`
+
 Login with email and password.
 
 **Request Body:**
@@ -190,11 +227,13 @@ Login with email and password.
 | password | string | ✅ |
 
 **Response `200` (no 2FA):**
+
 ```json
 { "data": { "token": "eyJhbGci..." } }
 ```
 
 **Response `200` (2FA enabled):**
+
 ```json
 { "data": { "requires2FA": true, "tempToken": "eyJhbGci..." } }
 ```
@@ -202,6 +241,7 @@ Login with email and password.
 ---
 
 ### `POST /auth/verify-2fa`
+
 Complete login after 2FA. Send `Authorization: Bearer <tempToken>`.
 
 **Request Body:**
@@ -210,6 +250,7 @@ Complete login after 2FA. Send `Authorization: Bearer <tempToken>`.
 | code | string | ✅ | 6-digit TOTP |
 
 **Response `200`:**
+
 ```json
 { "data": { "token": "eyJhbGci..." } }
 ```
@@ -217,9 +258,11 @@ Complete login after 2FA. Send `Authorization: Bearer <tempToken>`.
 ---
 
 ### `POST /auth/logout` 🔒
+
 Invalidate current session/token.
 
 **Response `200`:**
+
 ```json
 { "data": { "message": "Logout successfully" } }
 ```
@@ -227,6 +270,7 @@ Invalidate current session/token.
 ---
 
 ### `POST /auth/forget-password`
+
 Request a password reset email.
 
 **Request Body:**
@@ -235,6 +279,7 @@ Request a password reset email.
 | email | string | ✅ |
 
 **Response `200`:**
+
 ```json
 { "data": { "message": "If email exists, reset link will be sent" } }
 ```
@@ -242,6 +287,7 @@ Request a password reset email.
 ---
 
 ### `POST /auth/reset-password`
+
 Set a new password using the reset token.
 
 **Request Body:**
@@ -251,6 +297,7 @@ Set a new password using the reset token.
 | newPassword | string | ✅ | 8-32 chars |
 
 **Response `200`:**
+
 ```json
 { "data": { "message": "Password updated successfully" } }
 ```
@@ -258,11 +305,13 @@ Set a new password using the reset token.
 ---
 
 ### `GET /auth/google/login`
+
 Redirect to Google OAuth. Browser only, not for mobile/API.
 
 ---
 
 ### `GET /auth/google/callback`
+
 Google OAuth callback. Redirects to frontend with token query param.
 
 ---
@@ -270,9 +319,11 @@ Google OAuth callback. Redirects to frontend with token query param.
 ## Sessions
 
 ### `GET /sessions` 🔒
+
 List all active sessions for the current user.
 
 **Response `200`:**
+
 ```json
 [
   {
@@ -291,11 +342,13 @@ List all active sessions for the current user.
 ---
 
 ### `DELETE /sessions` 🔒
+
 Revoke all sessions except the current one.
 
 ---
 
 ### `DELETE /sessions/:id` 🔒
+
 Revoke a specific session.
 
 **Path Params:** `id` (number) - Session ID
@@ -305,6 +358,7 @@ Revoke a specific session.
 ## Notifications
 
 ### `GET /notifications` 🔒
+
 Get paginated list of notifications.
 
 **Query Params:**
@@ -316,16 +370,19 @@ Get paginated list of notifications.
 ---
 
 ### `GET /notifications/unread-count` 🔒
+
 Get count of unread notifications.
 
 ---
 
 ### `PATCH /notifications/read-all` 🔒
+
 Mark all notifications as read.
 
 ---
 
 ### `PATCH /notifications/:id/read` 🔒
+
 Mark a specific notification as read.
 
 **Path Params:** `id` (number) - Notification ID
@@ -333,6 +390,7 @@ Mark a specific notification as read.
 ---
 
 ### `DELETE /notifications/:id` 🔒
+
 Delete a notification.
 
 **Path Params:** `id` (number) - Notification ID
@@ -342,9 +400,11 @@ Delete a notification.
 ## User
 
 ### `GET /user/profile` 🔒
+
 Get the current user's profile.
 
 **Response `200`:**
+
 ```json
 {
   "data": {
@@ -362,16 +422,19 @@ Get the current user's profile.
 ## Mailboxes
 
 ### `GET /mailboxes` 🔒
+
 List all connected mailboxes.
 
 ---
 
 ### `GET /mailboxes/:id` 🔒
+
 Get mailbox by ID.
 
 ---
 
 ### `PATCH /mailboxes/:id` 🔒
+
 Update mailbox settings.
 
 **Request Body:**
@@ -383,21 +446,25 @@ Update mailbox settings.
 ---
 
 ### `DELETE /mailboxes/:id` 🔒
+
 Disconnect a mailbox.
 
 ---
 
 ### `POST /mailboxes/:id/sync` 🔒
+
 Trigger a manual sync for a mailbox.
 
 ---
 
 ### `GET /mailboxes/:id/reports` 🔒
+
 Get flagged emails report (spam + phishing) for a mailbox.
 
 ---
 
 ### `GET /mailboxes/gmail/auth-url` 🔒
+
 Get Gmail OAuth2 authorization URL.
 
 **Query Params:** `redirectUri` (required)
@@ -405,6 +472,7 @@ Get Gmail OAuth2 authorization URL.
 ---
 
 ### `POST /mailboxes/gmail` 🔒
+
 Connect Gmail via OAuth2.
 
 **Request Body:**
@@ -416,6 +484,7 @@ Connect Gmail via OAuth2.
 ---
 
 ### `GET /mailboxes/outlook/auth-url` 🔒
+
 Get Outlook OAuth2 authorization URL.
 
 **Query Params:** `redirectUri` (required)
@@ -423,6 +492,7 @@ Get Outlook OAuth2 authorization URL.
 ---
 
 ### `POST /mailboxes/outlook` 🔒
+
 Connect Outlook via OAuth2.
 
 **Request Body:**
@@ -434,6 +504,7 @@ Connect Outlook via OAuth2.
 ---
 
 ### `POST /mailboxes/imap` 🔒
+
 Connect a custom email via IMAP.
 
 **Request Body:**
@@ -453,6 +524,7 @@ Connect a custom email via IMAP.
 ## Emails
 
 ### `GET /mailboxes/:mailboxId/inbox` 🔒
+
 List inbox emails (paginated).
 
 **Query Params:**
@@ -464,34 +536,79 @@ List inbox emails (paginated).
 ---
 
 ### `GET /mailboxes/:mailboxId/sent` 🔒
+
 List sent emails (paginated).
 
 ---
 
 ### `GET /mailboxes/:mailboxId/spam` 🔒
+
 List spam emails (paginated).
 
 ---
 
 ### `GET /mailboxes/:mailboxId/phishing` 🔒
+
 List phishing emails (paginated).
 
 ---
 
+### `GET /mailboxes/:mailboxId/starred` 🔒
+
+List starred emails (paginated).
+
+---
+
+### `GET /mailboxes/:mailboxId/malware` 🔒
+
+List malware emails (paginated).
+
+---
+
+### `GET /mailboxes/:mailboxId/trash` 🔒
+
+List deleted emails (paginated).
+
+---
+
+### `GET /mailboxes/:mailboxId/search` 🔒
+
+Search emails by keyword.
+
+**Query Params:**
+| Param | Type | Required |
+|-------|------|----------|
+| q | string | ✅ |
+| page | number | ❌ |
+| limit | number | ❌ |
+
+---
+
 ### `GET /mailboxes/:mailboxId/emails/:id` 🔒
+
 Get full email details including body, attachments, security verdict, and AI report.
 
 ---
 
+### `GET /mailboxes/:mailboxId/emails/:id/attachments/:attachmentId/download` 🔒
+
+Download attachment.
+- **Note:** May return file stream or 302 redirect to Cloudinary.
+
+---
+
 ### `DELETE /mailboxes/:mailboxId/emails/:id` 🔒
+
 Delete email. Moves to TRASH first; permanently deletes if already in TRASH.
 
 ---
 
 ### `PATCH /mailboxes/:mailboxId/emails/:id/read` 🔒
+
 Mark email as read or unread.
 
 **Request Body:**
+
 ```json
 { "read": true }
 ```
@@ -499,28 +616,35 @@ Mark email as read or unread.
 ---
 
 ### `POST /mailboxes/:mailboxId/emails/:id/report` 🔒
+
 Report an email as spam or phishing.
 
 **Request Body:**
+
 ```json
 { "type": "spam" }
 ```
+
 Type options: `spam` | `phishing`
 
 ---
 
 ### `PATCH /mailboxes/:mailboxId/emails/:id/reclassify` 🔒
+
 Override email classification and move to correct folder.
 
 **Request Body:**
+
 ```json
 { "folder": "inbox" }
 ```
+
 Folder options: `inbox` | `sent` | `spam` | `phishing` | `trash`
 
 ---
 
 ### `POST /mailboxes/:mailboxId/send` 🔒
+
 Send a new email. Accepts `multipart/form-data`. Max 10 attachments, 10MB each.
 
 **Form Fields:**
@@ -539,6 +663,7 @@ Send a new email. Accepts `multipart/form-data`. Max 10 attachments, 10MB each.
 ---
 
 ### `POST /mailboxes/:mailboxId/emails/:id/reply` 🔒
+
 Reply to an email. Accepts `multipart/form-data`.
 
 **Form Fields:**
@@ -553,6 +678,7 @@ Reply to an email. Accepts `multipart/form-data`.
 ---
 
 ### `POST /mailboxes/:mailboxId/emails/:id/forward` 🔒
+
 Forward an email to a new recipient. Accepts `multipart/form-data`.
 
 **Form Fields:**
@@ -569,16 +695,19 @@ Forward an email to a new recipient. Accepts `multipart/form-data`.
 ## Analytics
 
 ### `GET /analytics/overview` 🔒
+
 Get overall stats across all mailboxes.
 
 ---
 
 ### `GET /analytics/mailboxes/:mailboxId` 🔒
+
 Get per-mailbox statistics.
 
 ---
 
 ### `GET /analytics/activity` 🔒
+
 Get email activity over time.
 
 **Query Params:**
@@ -591,9 +720,11 @@ Get email activity over time.
 ## User Settings
 
 ### `GET /user-settings` 🔒
+
 Get user settings bundle.
 
 **Response `200`:**
+
 ```json
 { "data": { "themeMode": "system", "notifications": true } }
 ```
@@ -601,6 +732,7 @@ Get user settings bundle.
 ---
 
 ### `PATCH /user-settings/profile` 🔒
+
 Update profile. Accepts `multipart/form-data`.
 
 **Form Fields:**
@@ -611,7 +743,20 @@ Update profile. Accepts `multipart/form-data`.
 
 ---
 
+### `PATCH /user-settings/notifications` 🔒
+
+Toggle push notifications.
+
+**Request Body:**
+
+```json
+{ "notificationsEnabled": true }
+```
+
+---
+
 ### `PATCH /user-settings/password` 🔒
+
 Change password.
 
 **Request Body:**
@@ -623,20 +768,25 @@ Change password.
 ---
 
 ### `PATCH /user-settings/theme` 🔒
+
 Set theme mode.
 
 **Request Body:**
+
 ```json
 { "themeMode": "DARK" }
 ```
+
 Options: `LIGHT` | `DARK`
 
 ---
 
 ### `POST /user-settings/2fa/setup` 🔒
+
 Start 2FA setup. Returns secret and OTP auth URL for QR code.
 
 **Response `200`:**
+
 ```json
 { "data": { "secret": "BASE32...", "otpauthUrl": "otpauth://..." } }
 ```
@@ -644,9 +794,11 @@ Start 2FA setup. Returns secret and OTP auth URL for QR code.
 ---
 
 ### `POST /user-settings/2fa/enable` 🔒
+
 Enable 2FA with TOTP code.
 
 **Request Body:**
+
 ```json
 { "code": "123456" }
 ```
@@ -654,9 +806,11 @@ Enable 2FA with TOTP code.
 ---
 
 ### `POST /user-settings/2fa/disable` 🔒
+
 Disable 2FA with TOTP code.
 
 **Request Body:**
+
 ```json
 { "code": "123456" }
 ```
@@ -668,6 +822,7 @@ Disable 2FA with TOTP code.
 > All admin routes require admin role JWT.
 
 ### `GET /admin/users` 🔒
+
 Paginated list of all users.
 
 **Query Params:**
@@ -682,41 +837,49 @@ Paginated list of all users.
 ---
 
 ### `GET /admin/users/:id` 🔒
+
 Full user details.
 
 ---
 
 ### `DELETE /admin/users/:id` 🔒
+
 Soft delete a user.
 
 ---
 
 ### `PATCH /admin/users/:id/ban` 🔒
+
 Ban a user.
 
 ---
 
 ### `PATCH /admin/users/:id/unban` 🔒
+
 Unban a user.
 
 ---
 
 ### `GET /admin/users/:id/sessions` 🔒
+
 View all sessions for a user.
 
 ---
 
 ### `DELETE /admin/users/:id/sessions` 🔒
+
 Revoke all sessions for a user.
 
 ---
 
 ### `GET /admin/users/:id/mailboxes` 🔒
+
 View all mailboxes for a user.
 
 ---
 
 ### `GET /admin/users/:id/notifications` 🔒
+
 View notifications for a user (paginated).
 
 ---
@@ -724,11 +887,13 @@ View notifications for a user (paginated).
 ## Admin - Stats
 
 ### `GET /admin/stats/overview` 🔒
+
 System-wide overview statistics.
 
 ---
 
 ### `GET /admin/stats/activity` 🔒
+
 Activity over the last 30 days.
 
 ---
@@ -736,6 +901,7 @@ Activity over the last 30 days.
 ## Admin - Emails
 
 ### `GET /admin/emails` 🔒
+
 Paginated list of all emails with filters.
 
 **Query Params:**
@@ -752,16 +918,19 @@ Paginated list of all emails with filters.
 ---
 
 ### `GET /admin/emails/:id` 🔒
+
 Full email details.
 
 ---
 
 ### `GET /admin/emails/phishing` 🔒
+
 Paginated list of phishing emails.
 
 ---
 
 ### `GET /admin/emails/spam` 🔒
+
 Paginated list of spam emails.
 
 ---
@@ -769,16 +938,19 @@ Paginated list of spam emails.
 ## Admin - Mailboxes
 
 ### `GET /admin/mailboxes` 🔒
+
 Paginated list of all mailboxes.
 
 ---
 
 ### `GET /admin/mailboxes/:id` 🔒
+
 Mailbox details with stats.
 
 ---
 
 ### `DELETE /admin/mailboxes/:id` 🔒
+
 Force disconnect a mailbox.
 
 ---
@@ -786,11 +958,13 @@ Force disconnect a mailbox.
 ## Admin - Notifications
 
 ### `GET /admin/notifications` 🔒
+
 Paginated list of all notifications.
 
 ---
 
 ### `POST /admin/notifications/broadcast` 🔒
+
 Broadcast a notification to users.
 
 **Request Body:**
@@ -807,6 +981,7 @@ Broadcast a notification to users.
 ---
 
 ### `DELETE /admin/notifications/:id` 🔒
+
 Delete any notification.
 
 ---
@@ -814,6 +989,7 @@ Delete any notification.
 ## Admin - Audit Logs
 
 ### `GET /admin/audit-logs` 🔒
+
 Paginated audit logs with filters.
 
 **Query Params:**
@@ -829,6 +1005,7 @@ Paginated audit logs with filters.
 ---
 
 ### `GET /admin/audit-logs/:adminId` 🔒
+
 Audit logs for a specific admin (same query params as above).
 
 ---
@@ -836,6 +1013,7 @@ Audit logs for a specific admin (same query params as above).
 ## Admin - Dashboard
 
 ### `GET /admin/dashboard` 🔒
+
 Dashboard summary.
 
 ---
@@ -845,6 +1023,7 @@ Dashboard summary.
 > Dev/test only. Disabled in production.
 
 ### `POST /security-test/analyze`
+
 Run the security pipeline on a custom payload.
 
 **Request Body:**
@@ -864,50 +1043,61 @@ Run the security pipeline on a custom payload.
 ---
 
 ### `POST /security-test/analyze/phishing`
+
 Run the built-in phishing scenario.
 
 ---
 
 ### `POST /security-test/analyze/bec`
+
 Run the built-in BEC (Business Email Compromise) scenario.
 
 ---
 
 ### `POST /security-test/analyze/malware`
+
 Run the built-in malware scenario.
 
 ---
 
 ### `POST /security-test/analyze/spam`
+
 Run the built-in spam scenario.
 
 ---
 
 ### `POST /security-test/analyze/clean`
+
 Run the built-in clean email scenario.
 
 ---
 
 ### `GET /security-test/cache/stats`
+
 Get intelligence cache statistics.
 
 ---
 
 ### `POST /security-test/cache/invalidate`
+
 Invalidate an intel cache entry.
 
 **Request Body:**
+
 ```json
 { "type": "url", "value": "https://evil.test/phish" }
 ```
+
 Type options: `url` | `ip` | `domain`
 
 ---
 
 ### `POST /security-test/intel/url`
+
 Lookup URL reputation.
 
 **Request Body:**
+
 ```json
 { "url": "https://example.com/path" }
 ```
@@ -915,9 +1105,11 @@ Lookup URL reputation.
 ---
 
 ### `POST /security-test/intel/ip`
+
 Lookup IP reputation.
 
 **Request Body:**
+
 ```json
 { "ip": "8.8.8.8" }
 ```
@@ -925,9 +1117,11 @@ Lookup IP reputation.
 ---
 
 ### `POST /security-test/intel/domain`
+
 Lookup domain reputation.
 
 **Request Body:**
+
 ```json
 { "domain": "example.com" }
 ```
@@ -936,20 +1130,20 @@ Lookup domain reputation.
 
 ## Common HTTP Status Codes
 
-| Code | Meaning |
-|------|---------|
-| 200 | Success |
-| 201 | Created |
-| 202 | Accepted (queued) |
-| 302 | Redirect |
-| 400 | Validation error / bad request |
-| 401 | Missing or invalid JWT |
-| 403 | Authenticated but not authorized |
-| 404 | Resource not found |
-| 409 | Conflict (e.g. duplicate) |
-| 429 | Rate limit exceeded |
-| 500 | Unexpected server error |
-| 503 | Dependency unavailable (e.g. database) |
+| Code | Meaning                                |
+| ---- | -------------------------------------- |
+| 200  | Success                                |
+| 201  | Created                                |
+| 202  | Accepted (queued)                      |
+| 302  | Redirect                               |
+| 400  | Validation error / bad request         |
+| 401  | Missing or invalid JWT                 |
+| 403  | Authenticated but not authorized       |
+| 404  | Resource not found                     |
+| 409  | Conflict (e.g. duplicate)              |
+| 429  | Rate limit exceeded                    |
+| 500  | Unexpected server error                |
+| 503  | Dependency unavailable (e.g. database) |
 
 ---
 

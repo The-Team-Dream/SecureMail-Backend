@@ -23,7 +23,9 @@ import {
   UploadedFiles,
   ParseIntPipe,
   BadRequestException,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import {
@@ -42,6 +44,7 @@ import { ApiErrorResponseDto } from 'src/common/swagger/api-error-response.dto';
 import { EmailsService } from './emails.service';
 import { TokenGuard } from '../../auth/guards/auth.guard';
 import { PaginatedQueryDto } from './dto/paginated-query.dto';
+import { SearchQueryDto } from './dto/search-query.dto';
 import { MarkReadDto } from './dto/mark-read.dto';
 import { ReportEmailDto } from './dto/report-email.dto';
 import { ReclassifyEmailDto } from './dto/reclassify-email.dto';
@@ -163,6 +166,91 @@ export class EmailsController {
     );
   }
 
+  @Get('starred')
+  @ApiOperation({
+    summary:     'List starred/flagged emails',
+    description: 'Returns a paginated list of emails flagged as starred across all folders.',
+  })
+  @ApiQuery({ name: 'page',  required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiResponse({ status: 200, description: 'Paginated starred email list returned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
+  getStarred(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Query() query: PaginatedQueryDto,
+  ) {
+    return this.emailsService.listStarred(
+      req.user.id, mailboxId,
+      query.page ?? 1, query.limit ?? 20,
+    );
+  }
+
+  @Get('malware')
+  @ApiOperation({
+    summary:     'List malware-quarantined emails',
+    description: 'Returns a paginated list of emails classified as MALWARE and quarantined.',
+  })
+  @ApiQuery({ name: 'page',  required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiResponse({ status: 200, description: 'Paginated malware email list returned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
+  getMalware(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Query() query: PaginatedQueryDto,
+  ) {
+    return this.emailsService.listByFolder(
+      req.user.id, mailboxId, FolderType.MALWARE,
+      query.page ?? 1, query.limit ?? 20,
+    );
+  }
+
+  @Get('trash')
+  @ApiOperation({
+    summary:     'List deleted emails',
+    description: 'Returns a paginated list of emails moved to the TRASH folder.',
+  })
+  @ApiQuery({ name: 'page',  required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiResponse({ status: 200, description: 'Paginated trash email list returned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
+  getTrash(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Query() query: PaginatedQueryDto,
+  ) {
+    return this.emailsService.listByFolder(
+      req.user.id, mailboxId, FolderType.TRASH,
+      query.page ?? 1, query.limit ?? 20,
+    );
+  }
+
+  @Get('search')
+  @ApiOperation({
+    summary:     'Search emails',
+    description: 'Returns a paginated list of emails matching the search query in subject, from name, or from address.',
+  })
+  @ApiQuery({ name: 'q',     required: false, example: 'invoice' })
+  @ApiQuery({ name: 'page',  required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiResponse({ status: 200, description: 'Paginated search results returned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
+  search(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Query() query: SearchQueryDto,
+  ) {
+    return this.emailsService.search(
+      req.user.id, mailboxId, query.q,
+      query.page ?? 1, query.limit ?? 20,
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // READ — Single email
   // ═══════════════════════════════════════════════════════════════════════════
@@ -182,6 +270,38 @@ export class EmailsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.emailsService.findOne(req.user.id, mailboxId, id);
+  }
+
+  @Get('emails/:id/attachments/:attachmentId/download')
+  @ApiOperation({
+    summary:     'Download an email attachment',
+    description: 'Downloads or redirects to the specified attachment.',
+  })
+  @ApiParam({ name: 'id', description: 'Email ID', type: Number })
+  @ApiParam({ name: 'attachmentId', description: 'Attachment ID', type: Number })
+  @ApiResponse({ status: 200, description: 'Streams the attachment file' })
+  @ApiResponse({ status: 302, description: 'Redirects to the external storage URL (e.g. Cloudinary)' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Attachment or Email not found' })
+  async downloadAttachment(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('attachmentId', ParseIntPipe) attachmentId: number,
+    @Res() res: Response,
+  ) {
+    const result = await this.emailsService.downloadAttachment(req.user.id, mailboxId, id, attachmentId);
+    
+    if (result.type === 'redirect') {
+      return res.redirect(result.url as string);
+    }
+
+    res.set({
+      'Content-Type': result.mimeType,
+      'Content-Disposition': `attachment; filename="${result.filename}"`,
+    });
+    
+    return (result.file as any).getStream().pipe(res);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

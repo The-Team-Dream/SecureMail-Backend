@@ -42,8 +42,9 @@
 import {
   Controller, Get, Post, Body,
   HttpCode, HttpStatus, Logger,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SecurityService, SecurityPipelineInput } from './security.service';
 import { IntelligenceCacheService } from './intelligence/intelligence-cache.service';
 import { Throttle } from '@nestjs/throttler';
@@ -55,6 +56,10 @@ import {
   IntelUrlDto,
 } from './dto/security-test.dto';
 import { ApiOkWrapped, ApiPublicErrorResponses } from 'src/common/swagger';
+import { TokenGuard } from 'src/auth/guards/auth.guard';
+import { RolesGuard } from 'src/common/guards/roles.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 // ─── Scenario definitions ──────────────────────────────────────────────────────
 
@@ -170,7 +175,10 @@ const SCENARIOS: Record<string, SecurityPipelineInput & { _userId: number }> = {
 
 @ApiTags('security-test')
 @ApiPublicErrorResponses()
+@ApiBearerAuth()
 @Controller('security-test')
+@UseGuards(TokenGuard, RolesGuard)
+@Roles(Role.ADMIN)
 @Throttle({ default: { limit: 5, ttl: 60000 } })
 export class SecurityTestController {
   private readonly logger = new Logger(SecurityTestController.name);

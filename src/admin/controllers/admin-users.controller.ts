@@ -35,7 +35,7 @@ export class AdminUsersController {
 
   @Get()
   @ApiOperation({ summary: 'Paginated list of all users' })
-  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 200, description: 'Paginated list of users', type: AdminPaginatedDto })
   findAll(@Query() query: AdminUsersQueryDto) {
     return this.service.findAll(
       query.page ?? 1,
@@ -47,37 +47,37 @@ export class AdminUsersController {
   }
 
   @Get(':id')
-  @ApiParam({ name: 'id' })
+  @ApiParam({ name: 'id', description: 'Internal User ID' })
   @ApiOperation({ summary: 'Full user details' })
-  @ApiResponse({ status: 200 })
-  @ApiResponse({ status: 404 })
+  @ApiResponse({ status: 200, description: 'User object with associated metadata' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   findOne(@Param('id') id: string) {
     return this.service.findOne(+id);
   }
 
   @Patch(':id/ban')
-  @ApiParam({ name: 'id' })
-  @ApiOperation({ summary: 'Ban user' })
-  @ApiResponse({ status: 200 })
-  @ApiResponse({ status: 404 })
+  @ApiParam({ name: 'id', description: 'Internal User ID' })
+  @ApiOperation({ summary: 'Ban user (prevents login)' })
+  @ApiResponse({ status: 200, description: 'User banned successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   ban(@Req() req: { user: { id: number } }, @Param('id') id: string) {
     return this.service.ban(req.user.id, +id);
   }
 
   @Patch(':id/unban')
-  @ApiParam({ name: 'id' })
-  @ApiOperation({ summary: 'Unban user' })
-  @ApiResponse({ status: 200 })
-  @ApiResponse({ status: 404 })
+  @ApiParam({ name: 'id', description: 'Internal User ID' })
+  @ApiOperation({ summary: 'Unban user (restores login access)' })
+  @ApiResponse({ status: 200, description: 'User unbanned successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   unban(@Req() req: { user: { id: number } }, @Param('id') id: string) {
     return this.service.unban(req.user.id, +id);
   }
 
   @Delete(':id')
-  @ApiParam({ name: 'id' })
-  @ApiOperation({ summary: 'Soft delete user' })
-  @ApiResponse({ status: 200 })
-  @ApiResponse({ status: 404 })
+  @ApiParam({ name: 'id', description: 'Internal User ID' })
+  @ApiOperation({ summary: 'Soft delete user (marks as deleted)' })
+  @ApiResponse({ status: 200, description: 'User soft-deleted successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   delete(@Req() req: { user: { id: number } }, @Param('id') id: string) {
     return this.service.softDelete(req.user.id, +id);
   }

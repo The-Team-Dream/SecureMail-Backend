@@ -26,7 +26,9 @@ async function bootstrap() {
   app.use(frameguard({ action: 'deny' }));
   app.use(noSniff());
 
-  app.use(hsts({ maxAge: 31536000, includeSubDomains: true, preload: true }));
+  if (!isDev) {
+    app.use(hsts({ maxAge: 31536000, includeSubDomains: true, preload: true }));
+  }
   app.use(referrerPolicy({ policy: 'strict-origin-when-cross-origin' }));
 
   if (!isDev) {

@@ -25,6 +25,7 @@ import { LoginDto } from './dto/login.dto';
 import { ForgetPasswordDto } from './dto/forgetpassword.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { Verify2FADto } from './dto/verify-2fa.dto';
 import { TokenGuard } from './guards/auth.guard';
 import { ApiOkWrapped, ApiStandardErrorResponses } from 'src/common/swagger';
@@ -181,6 +182,22 @@ export class AuthController {
     @ApiOkWrapped('Account verified', { message: 'Account verified successfully' })
     verifyRegisterOtp(@Body() data: VerifyOtpDto) {
         return this.authService.verifyRegisterOtp(data.email, data.otp);
+    }
+
+    @Post('resend-otp')
+    @ApiOperation({
+        summary: 'Resend registration OTP',
+        description:
+            'Re-sends the 6-digit verification OTP to the email address. ' +
+            'Rate-limited to once per 60 seconds per address. ' +
+            'Always returns the same response regardless of whether the email exists.',
+    })
+    @ApiBody({ type: ResendOtpDto })
+    @ApiOkWrapped('OTP resent (or silently dropped if address not pending)', {
+        message: 'If your account is pending verification, a new OTP has been sent.',
+    })
+    resendOtp(@Body() data: ResendOtpDto) {
+        return this.authService.resendOtp(data.email);
     }
 
     @Get('google/login')

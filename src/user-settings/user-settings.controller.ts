@@ -23,6 +23,7 @@ import { TokenGuard } from 'src/auth/guards/auth.guard';
 import { EditProfileDto } from './dto/edit-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ThemeModeDto } from './dto/theme-mode.dto';
+import { UpdateNotificationsDto } from './dto/update-notifications.dto';
 import { VerifyTotpDto } from './dto/verify-totp.dto';
 import { ApiOkWrapped, ApiStandardErrorResponses } from 'src/common/swagger';
 
@@ -96,6 +97,17 @@ export class UserSettingsController {
     @Body() dto: ThemeModeDto,
   ) {
     return this.userSettingsService.updateThemeMode(req.user.id, dto.themeMode);
+  }
+
+  @Patch('notifications')
+  @ApiOperation({ summary: 'Set push notifications preference' })
+  @ApiBody({ type: UpdateNotificationsDto })
+  @ApiOkWrapped('Notifications preference updated', { notificationsEnabled: false })
+  updateNotificationsEnabled(
+    @Req() req: { user: { id: number } },
+    @Body() dto: UpdateNotificationsDto,
+  ) {
+    return this.userSettingsService.updateNotificationsEnabled(req.user.id, dto.notificationsEnabled);
   }
 
   @Post('2fa/setup')

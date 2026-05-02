@@ -43,7 +43,7 @@ export class AdminNotificationsController {
 
   @Post('broadcast')
   @ApiOperation({ summary: 'Broadcast notification to users' })
-  @ApiResponse({ status: 201 })
+  @ApiResponse({ status: 201, description: 'Notification broadcasted to selected recipients' })
   broadcast(
     @Req() req: { user: { id: number } },
     @Body() dto: BroadcastNotificationDto,
