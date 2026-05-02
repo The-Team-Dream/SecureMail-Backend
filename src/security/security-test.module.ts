@@ -16,11 +16,15 @@ import { Module }                from '@nestjs/common';
 import { SecurityModule }        from './security.module';
 import { SecurityTestController } from './security-test.controller';
 import { IntelligenceModule }    from './intelligence/intelligence.module';
+import { AuthModule }            from 'src/auth/auth.module';
+import { PrismaModule }          from 'src/prisma.module';
 
 @Module({
   imports: [
     SecurityModule,
     IntelligenceModule,
+    AuthModule,
+    PrismaModule,
   ],
   controllers: [SecurityTestController],
 })
