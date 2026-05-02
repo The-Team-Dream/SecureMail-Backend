@@ -69,6 +69,9 @@ export class EmailsService {
           receivedAt: true,
           spamScore: true,
           phishingScore: true,
+          malwareVerdict: true,
+          malwareScore: true,
+          malwareSeverity: true,
         },
       }),
       this.prisma.email.count({
@@ -99,7 +102,10 @@ export class EmailsService {
     if (!email) {
       throw new NotFoundException('Email not found');
     }
-    return email;
+    return {
+      ...email,
+      aiReportStatus: email.aiReport ? 'COMPLETED' : 'PENDING',
+    };
   }
 
   async markRead(
@@ -115,10 +121,11 @@ export class EmailsService {
     if (!email) {
       throw new NotFoundException('Email not found');
     }
-    return this.prisma.email.update({
+    await this.prisma.email.update({
       where: { id: emailId },
       data: { isRead: read },
     });
+    return this.findOne(userId, mailboxId, emailId);
   }
 
   async delete(userId: number, mailboxId: number, emailId: number) {
@@ -140,11 +147,11 @@ export class EmailsService {
         where: { id: emailId },
         data: { folderId: trashFolder.id },
       });
-      return { message: 'Email moved to trash' };
+      return { message: 'Email moved to trash', action: 'trashed' as const, emailId };
     }
 
     await this.prisma.email.delete({ where: { id: emailId } });
-    return { message: 'Email deleted' };
+    return { message: 'Email deleted', action: 'deleted' as const, emailId };
   }
 
   async report(
@@ -187,7 +194,7 @@ export class EmailsService {
       });
     }
 
-    return { message: `Email reported as ${type}` };
+    return this.findOne(userId, mailboxId, emailId);
   }
 
   async reclassify(
@@ -230,7 +237,7 @@ export class EmailsService {
       data: updateData,
     });
 
-    return { message: `Email moved to ${targetFolder}` };
+    return this.findOne(userId, mailboxId, emailId);
   }
 
   private async getOrCreateFolder(

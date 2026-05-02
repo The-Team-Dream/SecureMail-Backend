@@ -14,6 +14,11 @@ export class UserService {
                 username:true,
                 email:true,
                 avatar:true,
+                isVerified:true,
+                totpEnabled:true,
+                provider:true,
+                role:true,
+                createdAt:true,
             }
         })
         return {user}

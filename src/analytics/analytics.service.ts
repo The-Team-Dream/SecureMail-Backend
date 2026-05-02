@@ -206,6 +206,10 @@ export class AnalyticsService {
         isPhishing: true,
         spamScore: true,
         phishingScore: true,
+        malwareVerdict: true,
+        malwareScore: true,
+        malwareSeverity: true,
+        aiReport: true,
       },
       orderBy: { receivedAt: 'desc' },
     });
@@ -217,11 +221,15 @@ export class AnalyticsService {
         from: e.fromAddr,
         fromName: e.fromName,
         date: e.receivedAt,
-        classification: e.isPhishing ? 'phishing' : 'spam',
+        classification: e.isPhishing ? 'phishing' : e.isSpam ? 'spam' : 'unknown',
         classificationReason: e.isPhishing
           ? `Phishing score: ${e.phishingScore}`
           : `Spam score: ${e.spamScore}`,
         classificationScore: e.isPhishing ? e.phishingScore : e.spamScore,
+        malwareVerdict: e.malwareVerdict,
+        malwareScore: e.malwareScore,
+        malwareSeverity: e.malwareSeverity,
+        aiReport: e.aiReport,
       })),
     };
   }

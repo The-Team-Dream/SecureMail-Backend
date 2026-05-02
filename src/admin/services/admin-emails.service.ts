@@ -72,6 +72,11 @@ export class AdminEmailsService {
           fromName: true,
           isSpam: true,
           isPhishing: true,
+          spamScore: true,
+          phishingScore: true,
+          malwareVerdict: true,
+          malwareScore: true,
+          malwareSeverity: true,
           receivedAt: true,
           mailBoxId: true,
           mailBox: { select: { displayName: true, emailAddress: true } },
@@ -91,7 +96,7 @@ export class AdminEmailsService {
       include: {
         mailBox: { select: { id: true, displayName: true, emailAddress: true } },
         folder: { select: { id: true, name: true, type: true } },
-        attachments: { select: { id: true, filename: true, mimeType: true, size: true } },
+        attachments: { select: { id: true, filename: true, mimeType: true, size: true, storagePath: true } },
       },
     });
     if (!email) throw new NotFoundException('Email not found');

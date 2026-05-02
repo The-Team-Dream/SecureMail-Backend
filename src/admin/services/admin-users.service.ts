@@ -84,11 +84,30 @@ export class AdminUsersService {
   async findOne(id: number) {
     const user = await this.prisma.user.findFirst({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        avatar: true,
+        provider: true,
+        isVerified: true,
+        totpEnabled: true,
+        role: true,
+        bannedAt: true,
+        deletedAt: true,
+        createdAt: true,
         sessions: {
           where: { expiresAt: { gt: new Date() } },
           orderBy: { loginAt: 'desc' },
           take: 10,
+          select: {
+            id: true,
+            ipAddress: true,
+            deviceOs: true,
+            deviceBrowser: true,
+            loginAt: true,
+            expiresAt: true,
+          },
         },
         _count: { select: { mailBoxes: true } },
       },

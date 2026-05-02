@@ -276,10 +276,11 @@ export class MailboxesService {
 
   async update(userId: number, id: number, dto: UpdateMailboxDto) {
     await this.findOne(userId, id);
-    return this.prisma.mailBox.update({
+    await this.prisma.mailBox.update({
       where: { id },
       data: dto,
     });
+    return this.findOne(userId, id);
   }
 
   async remove(userId: number, id: number) {
