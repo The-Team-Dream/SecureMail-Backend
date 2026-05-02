@@ -162,6 +162,20 @@ export class GmailProvider {
     return res.data;
   }
 
+  async getAttachment(
+    gmail: gmail_v1.Gmail,
+    userId: string,
+    messageId: string,
+    attachmentId: string,
+  ): Promise<gmail_v1.Schema$MessagePartBody> {
+    const res = await gmail.users.messages.attachments.get({
+      userId,
+      messageId,
+      id: attachmentId,
+    });
+    return res.data;
+  }
+
   getLabelMapping(): Record<string, string> {
     return {
       INBOX: 'INBOX',

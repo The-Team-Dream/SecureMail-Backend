@@ -173,7 +173,7 @@ export class AuthController {
     @ApiBody({ type: ResetPasswordDto })
     @ApiOkWrapped('Password updated', { message: 'Password updated successfully' })
     resetPassword(@Body() data: ResetPasswordDto) {
-        return this.authService.resetPassword(data.resetPasswordToken, data.newPassword);
+        return this.authService.resetPassword(data);
     }
 
     @Post('verify-register-otp')

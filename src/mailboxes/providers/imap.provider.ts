@@ -36,7 +36,7 @@ export interface ImapParsedMessage {
   html?: string;
   date?: Date;
   messageId?: string;
-  attachments: Array<{ filename: string; mimeType: string; size: number }>;
+  attachments: Array<{ filename: string; mimeType: string; size: number; content: Buffer }>;
 }
 
 @Injectable()
@@ -153,6 +153,7 @@ export class ImapProvider {
         filename: a.filename ?? 'unknown',
         mimeType: a.contentType ?? 'application/octet-stream',
         size: a.size ?? 0,
+        content: a.content,
       })) ?? [];
     return {
       from,

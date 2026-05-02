@@ -11,12 +11,13 @@ import { SmtpSendProvider } from './providers/smtp-send.provider';
 import { PrismaModule } from '../../prisma.module';
 import { AuthModule } from '../../auth/auth.module';
 import { MailboxesModule } from '../mailboxes.module';
+import { forwardRef } from '@nestjs/common';
 
 @Module({
   imports: [
     PrismaModule,
     AuthModule,
-    MailboxesModule,
+    forwardRef(() => MailboxesModule),
     BullModule.registerQueue({
       name: EMAIL_SEND_QUEUE,
       defaultJobOptions: {
@@ -36,6 +37,6 @@ import { MailboxesModule } from '../mailboxes.module';
     OutlookSendProvider,
     SmtpSendProvider,
   ],
-  exports: [EmailsService, EmailSendService],
+  exports: [EmailsService, EmailSendService, AttachmentStorageService],
 })
 export class EmailsModule {}

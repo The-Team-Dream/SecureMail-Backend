@@ -41,7 +41,7 @@ export interface SendJobData {
   replyToEmailId?:  number;
   forwardEmailId?:  number;
   // Updated: url (Cloudinary CDN) instead of path (local disk)
-  attachments?:     Array<{ url: string; publicId: string; filename: string; mimeType: string }>;
+  attachments?:     Array<{ url: string; publicId: string; filename: string; mimeType: string; size: number }>;
 }
 
 @Injectable()

@@ -162,6 +162,11 @@ export class OutlookProvider {
       .get();
   }
 
+  async getAttachments(client: Client, messageId: string) {
+    const res = await client.api(`/me/messages/${messageId}/attachments`).get();
+    return res.value ?? [];
+  }
+
   getFolderMapping(): Record<string, string> {
     return {
       inbox: 'inbox',

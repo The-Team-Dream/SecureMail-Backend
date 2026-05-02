@@ -117,9 +117,8 @@ export class EmailSendProcessor extends WorkerHost {
 
       await this.saveSentEmail(mailbox.id, data, from);
     } finally {
-      if (data.attachments?.length) {
-        await this.attachmentStorage.cleanupPaths(data.attachments);
-      }
+      // Cleanup is now handled by a separate retention policy/job 
+      // to ensure history remains available in the "Sent" folder.
     }
   }
 
@@ -157,6 +156,16 @@ export class EmailSendProcessor extends WorkerHost {
         bodyHtml: data.bodyHtml,
         isRead: true,
         receivedAt: new Date(),
+        attachments: data.attachments?.length
+          ? {
+              create: data.attachments.map((a) => ({
+                filename: a.filename,
+                mimeType: a.mimeType,
+                size: a.size || 0,
+                storagePath: a.url, // Full Cloudinary URL stored as storagePath
+              })),
+            }
+          : undefined,
       },
     });
   }

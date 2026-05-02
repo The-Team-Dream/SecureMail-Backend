@@ -105,7 +105,6 @@ model MailBox {
 enum EmailProviders {
   GMAIL
   OUTLOOK
-  YAHOO
   CUSTOM
 }
 
@@ -275,6 +274,7 @@ enum NotificationType {
   NEW_EMAIL_RECEIVED
   PHISHING_DETECTED
   MALWARE_DETECTED
+  FAILED_SYNC
 }
 
 model SyncLog {

@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import { NodeMailerService } from 'src/node-mailer/node-mailer.service';
 import { User, ThemeMode } from '@prisma/client';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { LoginDto } from './dto/login.dto';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -72,11 +73,10 @@ export class AuthService {
     async register(data: RegisterDto) {
         const existingUser = await this.prisma.user.findUnique({ where: { email: data.email } })
         if (existingUser) {
-            if (!existingUser.isVerified) {
-                // Unverified account exists — tell user to resend OTP instead
-                throw new BadRequestException('Account already registered but not verified. Use resend-otp to get a new code.')
-            }
-            throw new BadRequestException('Email already in use')
+            // Generic message for security: don't reveal unverified accounts status.
+            // If they are unverified, they can use resend-otp.
+            // If they are verified, email is already in use.
+            throw new BadRequestException('Email already in use or verification pending. Check your inbox.')
         }
         const hashedPassword = await bcrypt.hash(data.password, 10)
 
@@ -264,10 +264,13 @@ export class AuthService {
         return { message: 'If email exists, reset link will be sent' };
     }
 
-    async resetPassword(token: string, newPassword: string) {
+    async resetPassword(data: ResetPasswordDto) {
+        if (data.newPassword !== data.confirmPassword) {
+            throw new BadRequestException('Passwords do not match');
+        }
         const hashedToken = crypto
             .createHash('sha256')
-            .update(token)
+            .update(data.resetPasswordToken)
             .digest('hex');
 
         const user = await this.prisma.user.findFirst({
@@ -282,7 +285,7 @@ export class AuthService {
         if (!user) {
             throw new BadRequestException('Invalid or expired token');
         }
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(data.newPassword, 10);
         await this.prisma.user.update({
             where: { id: user.id },
             data: {
@@ -308,9 +311,7 @@ export class AuthService {
         });
 
         if (user) {
-            if (user.provider !== "google" || !user.oauthId) {
-                throw new UnauthorizedException("Unauthorized")
-            }
+            // Allow linking Google to existing accounts if email matches
             user = await this.prisma.user.update({
                 where: { email: data.email },
                 data: {

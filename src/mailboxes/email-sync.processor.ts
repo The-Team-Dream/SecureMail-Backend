@@ -24,8 +24,10 @@ import { ImapProvider }             from './providers/imap.provider';
 import { MailboxesService }         from './mailboxes.service';
 import { SecurityService, SecurityPipelineInput } from '../security/security.service';
 import { EmailProviders, FolderType, SyncStatus, NotificationType } from '@prisma/client';
-import { google }                   from 'googleapis';
+import { google, gmail_v1 }       from 'googleapis';
 import { QUEUE_EMAIL_SYNC }         from '../common/constants/queues';
+import { AttachmentStorageService } from './emails/attachment-storage.service';
+import { Client }                   from '@microsoft/microsoft-graph-client';
 
 export const EMAIL_SYNC_QUEUE = QUEUE_EMAIL_SYNC;
 
@@ -46,6 +48,12 @@ interface NormalizedEmailData {
   isRead:     boolean;
   isFlagged:  boolean;
   isSpam:     boolean;
+  attachments?: Array<{
+    filename: string;
+    mimeType: string;
+    size: number;
+    content: Buffer;
+  }>;
 }
 
 @Processor(EMAIL_SYNC_QUEUE, { concurrency: 5 })
@@ -63,6 +71,7 @@ export class EmailSyncProcessor extends WorkerHost {
     private readonly outlookProvider:      OutlookProvider,
     private readonly imapProvider:         ImapProvider,
     private readonly mailboxesService:     MailboxesService,
+    private readonly attachmentStorage:    AttachmentStorageService,
   ) {
     super();
   }
@@ -109,14 +118,27 @@ export class EmailSyncProcessor extends WorkerHost {
       await this.checkLowMailboxSpace(mailBox);
 
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       await this.prisma.syncLog.create({
         data: {
           mailBoxId,
-          status:       SyncStatus.FAILED,
-          errorMessage: err instanceof Error ? err.message : String(err),
-          syncedAt:     new Date(),
+          status: SyncStatus.FAILED,
+          errorMessage,
+          syncedAt: new Date(),
         },
       });
+
+      // Notify user about the sync failure
+      const mailBox = await this.prisma.mailBox.findUnique({ where: { id: mailBoxId } });
+      if (mailBox) {
+        await this.notificationsService.create({
+          userId: mailBox.userId,
+          type: NotificationType.FAILED_SYNC,
+          title: 'Mailbox Sync Failed',
+          message: `Sync failed for ${mailBox.emailAddress}: ${errorMessage}`,
+          mailBoxId: mailBox.id,
+        });
+      }
       throw err;
     }
   }
@@ -163,6 +185,7 @@ export class EmailSyncProcessor extends WorkerHost {
           { id: mailBox.id, userId: mailBox.userId },
           { id: folder.id, type: folder.type },
           full as any,
+          gmail,
         );
       }
     }
@@ -173,10 +196,11 @@ export class EmailSyncProcessor extends WorkerHost {
     folder:  { id: number; type: string },
     msg:     {
       id?: string;
-      payload?: { headers?: Array<{ name?: string; value?: string }>; body?: { data?: string }; parts?: Array<{ mimeType?: string; body?: { data?: string } }> };
+      payload?: { headers?: Array<{ name?: string; value?: string }>; body?: { data?: string }; parts?: Array<{ mimeType?: string; filename?: string; body?: { data?: string; attachmentId?: string }; parts?: any[] }> };
       internalDate?: string;
       labelIds?: string[];
     },
+    gmail:   gmail_v1.Gmail,
   ) {
     const getHeader = (name: string) =>
       msg.payload?.headers?.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value ?? '';
@@ -212,9 +236,36 @@ export class EmailSyncProcessor extends WorkerHost {
       isRead:     !(msg.labelIds?.includes('UNREAD') ?? false),
       isFlagged:  msg.labelIds?.includes('STARRED') ?? false,
       isSpam:     msg.labelIds?.includes('SPAM') ?? false,
+      attachments: await this.extractGmailAttachments(gmail, 'me', msg.id!, msg.payload?.parts ?? []),
     };
 
     await this.upsertAndAnalyze(mailBox, folder, normalized);
+  }
+
+  private async extractGmailAttachments(
+    gmail: gmail_v1.Gmail,
+    userId: string,
+    messageId: string,
+    parts: any[],
+  ): Promise<Array<{ filename: string; mimeType: string; size: number; content: Buffer }>> {
+    const attachments: any[] = [];
+    for (const part of parts) {
+      if (part.filename && part.body?.attachmentId) {
+        const body = await this.gmailProvider.getAttachment(gmail, userId, messageId, part.body.attachmentId);
+        if (body.data) {
+          attachments.push({
+            filename: part.filename,
+            mimeType: part.mimeType,
+            size: body.size ?? 0,
+            content: Buffer.from(body.data, 'base64'),
+          });
+        }
+      } else if (part.parts) {
+        const sub = await this.extractGmailAttachments(gmail, userId, messageId, part.parts);
+        attachments.push(...sub);
+      }
+    }
+    return attachments;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -257,6 +308,7 @@ export class EmailSyncProcessor extends WorkerHost {
           { id: mailBox.id, userId: mailBox.userId },
           { id: folder.id, type: folder.type },
           full,
+          client,
         );
       }
     }
@@ -274,7 +326,9 @@ export class EmailSyncProcessor extends WorkerHost {
       body?: { content?: string; contentType?: string };
       bodyPreview?: string; receivedDateTime?: string;
       isRead?: boolean; flag?: { flagStatus?: string };
+      hasAttachments?: boolean;
     },
+    client:  Client,
   ) {
     const from = msg.from?.emailAddress
       ? `${msg.from.emailAddress.name ? `"${msg.from.emailAddress.name}" ` : ''}<${msg.from.emailAddress.address}>`
@@ -294,9 +348,27 @@ export class EmailSyncProcessor extends WorkerHost {
       isRead:     msg.isRead ?? false,
       isFlagged:  msg.flag?.flagStatus === 'flagged',
       isSpam:     false,
+      attachments: msg.hasAttachments
+        ? await this.extractOutlookAttachments(client, msg.id!)
+        : [],
     };
 
     await this.upsertAndAnalyze(mailBox, folder, normalized);
+  }
+
+  private async extractOutlookAttachments(
+    client: Client,
+    messageId: string,
+  ): Promise<Array<{ filename: string; mimeType: string; size: number; content: Buffer }>> {
+    const raw = await this.outlookProvider.getAttachments(client, messageId);
+    return raw
+      .filter((a: any) => a['@odata.type'] === '#microsoft.graph.fileAttachment')
+      .map((a: any) => ({
+        filename: a.name,
+        mimeType: a.contentType,
+        size: a.size,
+        content: Buffer.from(a.contentBytes, 'base64'),
+      }));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -346,6 +418,7 @@ export class EmailSyncProcessor extends WorkerHost {
             isRead:    msg.flags.has('\\Seen'),
             isFlagged: msg.flags.has('\\Flagged'),
             isSpam:    type === 'SPAM',
+            attachments: full.attachments,
           };
 
           await this.upsertAndAnalyze(
@@ -420,7 +493,46 @@ export class EmailSyncProcessor extends WorkerHost {
       },
     });
 
-    // ── 3. Collect attachments (already stored by attachment-storage.service) ──
+    // ── 3. Save and collect attachments ──────────────────────────────────────
+    if (data.attachments?.length) {
+      // Filter out attachments that already exist in DB to avoid duplicates
+      const existingAtts = await this.prisma.attachment.findMany({
+        where: { emailId: email.id },
+        select: { filename: true },
+      });
+      const existingNames = new Set(existingAtts.map(a => a.filename));
+
+      for (const att of data.attachments) {
+        if (existingNames.has(att.filename)) continue;
+
+        // Convert Buffer to Multer-like file object for AttachmentStorageService
+        const file = {
+          buffer: att.content,
+          originalname: att.filename,
+          mimetype: att.mimeType,
+          size: att.size,
+        } as Express.Multer.File;
+
+        try {
+          // Cloudinary upload
+          const stored = await this.attachmentStorage.saveAttachments([file]);
+          if (stored.length > 0) {
+            await this.prisma.attachment.create({
+              data: {
+                emailId: email.id,
+                filename: stored[0].filename,
+                mimeType: stored[0].mimeType,
+                size: stored[0].size,
+                storagePath: stored[0].url,
+              },
+            });
+          }
+        } catch (err) {
+          this.logger.error(`Failed to save attachment ${att.filename} for email ${email.id}`, err);
+        }
+      }
+    }
+
     const attachments = await this.prisma.attachment.findMany({
       where:  { emailId: email.id },
       select: { storagePath: true, filename: true, mimeType: true, size: true },

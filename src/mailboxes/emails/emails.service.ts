@@ -4,7 +4,6 @@ import {
   NotFoundException,
   StreamableFile,
 } from '@nestjs/common';
-import { createReadStream, existsSync } from 'fs';
 import { PrismaService } from '../../prisma.service';
 import { FolderType } from '@prisma/client';
 import { ReportType } from './dto/report-email.dto';
@@ -401,17 +400,8 @@ export class EmailsService {
       return { url: attachment.storagePath, type: 'redirect' };
     }
 
-    // Otherwise, treat as local file path
-    if (!existsSync(attachment.storagePath)) {
-      throw new NotFoundException('Attachment file not found on disk');
-    }
-
-    const file = createReadStream(attachment.storagePath);
-    return {
-      type: 'stream',
-      file: new StreamableFile(file),
-      filename: attachment.filename ?? 'attachment',
-      mimeType: attachment.mimeType,
-    };
+    // Since we've migrated to Cloudinary, local file streaming is deprecated.
+    // If we reach here, it means storagePath was not a URL, which shouldn't happen for new records.
+    throw new NotFoundException('Attachment source not available (deprecated local storage)');
   }
 }

@@ -39,6 +39,7 @@ export interface StoredAttachment {
   publicId:   string;   // Cloudinary public_id — for deletion
   filename:   string;   // Original sanitized filename
   mimeType:   string;   // MIME type
+  size:       number;   // File size in bytes
 }
 
 @Injectable()
@@ -113,6 +114,7 @@ export class AttachmentStorageService {
             publicId: result.public_id,
             filename: safeName,
             mimeType: file.mimetype || 'application/octet-stream',
+            size:     result.bytes || file.size,
           });
         },
       );

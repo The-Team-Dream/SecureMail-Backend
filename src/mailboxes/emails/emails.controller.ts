@@ -295,13 +295,9 @@ export class EmailsController {
     if (result.type === 'redirect') {
       return res.redirect(result.url as string);
     }
-
-    res.set({
-      'Content-Type': result.mimeType,
-      'Content-Disposition': `attachment; filename="${result.filename}"`,
-    });
     
-    return (result.file as any).getStream().pipe(res);
+    // Fallback (should not be reached due to service logic)
+    throw new BadRequestException('Attachment download failed');
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

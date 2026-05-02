@@ -29,4 +29,12 @@ export class ResetPasswordDto {
         message: 'Password must contain uppercase, lowercase and number',
     })
     newPassword!: string;
+
+    @ApiProperty({
+        example: 'NewPassword123',
+        description: 'Confirm your new password',
+    })
+    @IsString()
+    @IsNotEmpty()
+    confirmPassword!: string;
 }

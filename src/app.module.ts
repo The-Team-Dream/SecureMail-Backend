@@ -26,6 +26,7 @@ import { MalwareModule } from './security/pipeline/6-malware/malware.module';
 import { ProtoModule } from './proto/proto.module';
 import { SecurityModule } from './security/security.module';
 import { SecurityTestModule } from './security/security-test.module';
+import { RetentionModule } from './retention/retention.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { SecurityTestModule } from './security/security-test.module';
     MalwareModule,
     ProtoModule,
     SecurityModule,
+    RetentionModule,
     ...(process.env.NODE_ENV !== 'production' ? [SecurityTestModule] : [])
   ],
   controllers: [AppController],

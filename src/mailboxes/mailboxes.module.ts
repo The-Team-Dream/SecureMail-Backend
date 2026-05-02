@@ -7,7 +7,7 @@
 //   - SecurityModule import remains — EmailSyncProcessor injects SecurityService
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Module }             from '@nestjs/common';
+import { Module, forwardRef }             from '@nestjs/common';
 import { BullModule }         from '@nestjs/bullmq';
 import { MailboxesController } from './mailboxes.controller';
 import { MailboxesService }   from './mailboxes.service';
@@ -23,6 +23,7 @@ import { OutlookProvider }    from './providers/outlook.provider';
 import { ImapProvider }       from './providers/imap.provider';
 import { EMAIL_SYNC_QUEUE }   from './email-sync.service';
 import { SecurityModule }     from '../security/security.module';
+import { EmailsModule }       from './emails/emails.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { SecurityModule }     from '../security/security.module';
     SecurityModule,          // ← provides SecurityService (replaces Classification/AI/Malware)
     NotificationsModule,
     AnalyticsModule,
+    forwardRef(() => EmailsModule),
     BullModule.registerQueue({
       name: EMAIL_SYNC_QUEUE,
       defaultJobOptions: {
