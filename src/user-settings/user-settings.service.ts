@@ -47,8 +47,10 @@ export class UserSettingsService {
     return {
       user: {
         ...user,
-        avatar: user.avatar 
-          ? (user.avatar.startsWith('http') ? user.avatar : `/uploads/${user.avatar}`) 
+        avatar: user.avatar
+          ? user.avatar.startsWith('http')
+            ? user.avatar
+            : `/uploads/${user.avatar}`
           : null,
       },
       settings: settings
@@ -64,7 +66,7 @@ export class UserSettingsService {
   }
 
   async editProfile(userId: number, dto: EditProfileDto, file?: Express.Multer.File) {
-    const updateData: { username?: string; avatar?: string } = {};
+    const updateData: { username?: string; avatar?: string | null } = {};
 
     if (dto.username !== undefined) {
       updateData.username = dto.username;
@@ -81,6 +83,15 @@ export class UserSettingsService {
       }
       const path = await this.storage.saveFile(file.buffer, file.mimetype, userId);
       updateData.avatar = path;
+    } else if (dto.removeAvatar) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { avatar: true },
+      });
+      if (user?.avatar) {
+        await this.storage.deleteFile(user.avatar);
+      }
+      updateData.avatar = null;
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -100,8 +111,10 @@ export class UserSettingsService {
 
     return {
       ...updated,
-      avatar: updated.avatar 
-        ? (updated.avatar.startsWith('http') ? updated.avatar : `/uploads/${updated.avatar}`) 
+      avatar: updated.avatar
+        ? updated.avatar.startsWith('http')
+          ? updated.avatar
+          : `/uploads/${updated.avatar}`
         : null,
     };
   }

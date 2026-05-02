@@ -18,4 +18,11 @@ export class EditProfileDto {
   @MinLength(2, { message: 'Name must be at least 2 characters' })
   @MaxLength(50, { message: 'Name must not exceed 50 characters' })
   username?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'If true, the current avatar will be removed. Ignored if a new avatar file is uploaded.',
+  })
+  @IsOptional()
+  removeAvatar?: boolean;
 }
