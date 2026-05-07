@@ -58,10 +58,17 @@ export class MailboxesService {
   }
 
   async connectGmail(userId: number, dto: ConnectGmailDto) {
+    console.log(`[MailboxesService] connectGmail started for user ${userId}`);
+    console.log(`[MailboxesService] Code: ${dto.code}`);
+    console.log(`[MailboxesService] RedirectUri: ${dto.redirectUri}`);
+    
     const { tokens, email } = await this.gmailProvider.exchangeCodeForTokens(
       dto.code,
       dto.redirectUri,
     );
+    
+    console.log(`[MailboxesService] Successfully exchanged code for tokens for ${email}`);
+
     const existing = await this.prisma.mailBox.findFirst({
       where: { userId, emailAddress: email, provider: EmailProviders.GMAIL },
     });
@@ -98,7 +105,12 @@ export class MailboxesService {
       },
       include: { folders: true },
     });
+    
+    // Trigger immediate sync
+    await this.emailSyncService.scheduleSync(mailBox.id);
+
     return mailBox;
+
   }
 
   async getOutlookAuthUrl(userId: number, redirectUri: string) {
@@ -150,7 +162,12 @@ export class MailboxesService {
       },
       include: { folders: true },
     });
+    
+    // Trigger immediate sync
+    await this.emailSyncService.scheduleSync(mailBox.id);
+
     return mailBox;
+
   }
 
   private inferSmtpFromImap(imapHost: string): { host: string; port: number } {
@@ -248,8 +265,13 @@ export class MailboxesService {
       },
       include: { folders: true, imapConfig: true, smtpConfig: true },
     });
+
+    // Trigger immediate sync
+    await this.emailSyncService.scheduleSync(mailBox.id);
+
     return this.findOne(userId, mailBox.id);
   }
+
 
   async findOne(userId: number, id: number) {
     const mailBox = await this.prisma.mailBox.findFirst({

@@ -60,7 +60,10 @@ export class GmailProvider {
       this.clientSecret,
       redirectUri,
     );
+    console.log(`[GmailProvider] Requesting tokens from Google with code...`);
     const { tokens } = await oauth2Client.getToken(code);
+    console.log(`[GmailProvider] Tokens received from Google.`);
+
     if (!tokens.access_token || !tokens.refresh_token) {
       throw new Error('Invalid token response from Google');
     }

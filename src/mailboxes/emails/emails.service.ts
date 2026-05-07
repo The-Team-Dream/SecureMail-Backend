@@ -59,6 +59,7 @@ export class EmailsService {
         take: limit,
         select: {
           id: true,
+          mailBoxId: true,
           subject: true,
           fromAddr: true,
           fromName: true,
@@ -108,6 +109,7 @@ export class EmailsService {
         take: limit,
         select: {
           id: true,
+          mailBoxId: true,
           subject: true,
           fromAddr: true,
           fromName: true,
@@ -172,6 +174,7 @@ export class EmailsService {
         take: limit,
         select: {
           id: true,
+          mailBoxId: true,
           subject: true,
           fromAddr: true,
           fromName: true,
