@@ -110,6 +110,19 @@ export class GmailProvider {
     };
   }
 
+  async revokeToken(refreshTokenEncrypted: string): Promise<void> {
+    try {
+      const refreshToken = this.encryption.decrypt(refreshTokenEncrypted);
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret,
+      );
+      await oauth2Client.revokeToken(refreshToken);
+    } catch (error: any) {
+      console.warn('Failed to revoke Gmail token from Google:', error.message);
+    }
+  }
+
   async getGmailClient(
     accessTokenEncrypted: string,
     refreshTokenEncrypted: string,
@@ -132,12 +145,14 @@ export class GmailProvider {
     labelIds: string[],
     maxResults = 50,
     pageToken?: string,
+    q?: string,
   ): Promise<{ messages: GmailMessageSummary[]; nextPageToken?: string }> {
     const res = await gmail.users.messages.list({
       userId,
       labelIds,
       maxResults,
       pageToken,
+      q,
     });
     const messages = (res.data.messages ?? []).map((m) => ({
       id: m.id!,
@@ -177,6 +192,23 @@ export class GmailProvider {
       id: attachmentId,
     });
     return res.data;
+  }
+
+  async modifyLabels(
+    gmail: gmail_v1.Gmail,
+    userId: string,
+    messageId: string,
+    addLabelIds: string[],
+    removeLabelIds: string[],
+  ): Promise<void> {
+    await gmail.users.messages.modify({
+      userId,
+      id: messageId,
+      requestBody: {
+        addLabelIds,
+        removeLabelIds,
+      },
+    });
   }
 
   getLabelMapping(): Record<string, string> {

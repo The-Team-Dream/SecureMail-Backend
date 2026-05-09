@@ -174,17 +174,22 @@ export class SecurityService {
           const emailId = Number(input.emailId);
           const mailBoxId = Number(input.mailBoxId);
           const folder = await this.getOrCreateFolder(mailBoxId, FolderType.MALWARE);
-          await this.prisma.email.update({
-            where: { id: emailId },
-            data: {
-              malwareScore: sig.score ?? 0,
-              malwareVerdict: sig.verdict,
-              malwareSeverity: sig.severity ?? 'Critical',
-              isPhishing: false,
-              isSpam: false,
-              folderId: folder.id,
-            },
-          });
+          try {
+            await this.prisma.email.update({
+              where: { id: emailId },
+              data: {
+                malwareScore: sig.score ?? 0,
+                malwareVerdict: sig.verdict,
+                isPhishing: false,
+                isSpam: false,
+                folderId: folder.id,
+              },
+            });
+          } catch (err: any) {
+            if (err.code === 'P2002') {
+               await this.prisma.email.delete({ where: { id: emailId } });
+            }
+          }
           await this.notify(
             userId,
             mailBoxId,
@@ -437,7 +442,16 @@ export class SecurityService {
     await this.prisma.email.update({
       where: { id: emailId },
       data: updateData,
-    }).catch(err => this.logger.warn('Email update failed', { emailId, error: String(err) }));
+    }).catch(async (err) => {
+      // If we failed with unique constraint, it means the message already exists in the target folder.
+      // We can safely delete the current duplicate email record since the target folder already has a copy.
+      if (String(err).includes('P2002') && updateData.folderId) {
+        this.logger.warn('Duplicate email detected in target folder, removing current record', { emailId, messageId: input.messageId });
+        await this.prisma.email.delete({ where: { id: emailId } }).catch(() => {});
+      } else {
+        this.logger.warn('Email update failed', { emailId, error: String(err) });
+      }
+    });
   }
 
   private async sendNotifications(

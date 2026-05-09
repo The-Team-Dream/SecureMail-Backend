@@ -27,6 +27,10 @@ export class EmailSyncService {
   }
 
   async scheduleSync(mailBoxId: number) {
-    await this.syncQueue.add('sync-mailbox', { mailBoxId }, { jobId: `sync-${mailBoxId}` });
+    await this.syncQueue.add(
+      'sync-mailbox',
+      { mailBoxId },
+      { jobId: `sync-${mailBoxId}-${Date.now()}` },
+    );
   }
 }

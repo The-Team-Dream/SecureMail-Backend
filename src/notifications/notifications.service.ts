@@ -56,6 +56,14 @@ export class NotificationsService {
     return notification;
   }
 
+  emitEvent(userId: number, eventName: string, payload: unknown) {
+    try {
+      this.gateway.emitEventToUser(userId, eventName, payload);
+    } catch {
+      // Ignore
+    }
+  }
+
   async findAll(
     userId: number,
     page: number,

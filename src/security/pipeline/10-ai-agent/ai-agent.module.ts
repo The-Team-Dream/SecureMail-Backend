@@ -18,7 +18,7 @@ const maxRecv = (Number.isFinite(recvMb) ? recvMb : 8) * 1024 * 1024;
         options: {
           package: 'aiagent',
           protoPath: resolveAiAgentProtoPath(),
-          url: process.env.AI_AGENT_GRPC_URL ?? 'localhost:50051',
+          url: process.env.AI_AGENT_GRPC_URL ?? '127.0.0.1:50051',
           credentials: createAiAgentChannelCredentials(),
           loader: {
             keepCase: true,

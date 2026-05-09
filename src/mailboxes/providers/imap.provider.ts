@@ -169,6 +169,21 @@ export class ImapProvider {
     };
   }
 
+  async setMessageFlags(client: ImapFlow, mailbox: string, uid: number, flags: string[], operation: 'add' | 'remove' | 'set' = 'set') {
+    const lock = await client.getMailboxLock(mailbox);
+    try {
+      if (operation === 'add') {
+        await client.messageFlagsAdd({ uid }, flags, { uid: true });
+      } else if (operation === 'remove') {
+        await client.messageFlagsRemove({ uid }, flags, { uid: true });
+      } else {
+        await client.messageFlagsSet({ uid }, flags, { uid: true });
+      }
+    } finally {
+      lock.release();
+    }
+  }
+
   getFolderMapping(): Record<string, string> {
     return {
       INBOX: 'INBOX',

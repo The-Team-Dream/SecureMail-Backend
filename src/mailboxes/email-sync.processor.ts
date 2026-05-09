@@ -74,6 +74,7 @@ export class EmailSyncProcessor extends WorkerHost {
     private readonly attachmentStorage:    AttachmentStorageService,
   ) {
     super();
+    this.logger.log('EmailSyncProcessor initialized and waiting for jobs...');
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -82,12 +83,24 @@ export class EmailSyncProcessor extends WorkerHost {
 
   async process(job: Job<{ mailBoxId: number }, void, string>): Promise<void> {
     const { mailBoxId } = job.data;
+    this.logger.log(`[SYNC START] Processing sync for mailbox ${mailBoxId}...`);
     try {
       const mailBox = await this.prisma.mailBox.findUnique({
         where:   { id: mailBoxId },
         include: { folders: true, oauthToken: true, imapConfig: true },
       });
-      if (!mailBox) return;
+      if (!mailBox) {
+        this.logger.warn(`[SYNC] Mailbox ${mailBoxId} not found, skipping.`);
+        return;
+      }
+
+      this.logger.log(`[SYNC] Provider: ${mailBox.provider} for ${mailBox.emailAddress}`);
+      this.logger.log(`[SYNC] Last synced at: ${mailBox.lastSyncedAt?.toISOString() ?? 'Never'}`);
+
+      // ── Notify Flutter that sync has started ──────────────────────────────
+      this.notificationsService.emitEvent(mailBox.userId, 'mailbox_sync_start', {
+        mailBoxId,
+      });
 
       if (mailBox.provider === EmailProviders.GMAIL) {
         await this.syncGmail(mailBox);
@@ -115,7 +128,14 @@ export class EmailSyncProcessor extends WorkerHost {
         where: { id: mailBoxId },
         data:  { lastSyncedAt: new Date() },
       });
+      this.logger.log(`[SYNC SUCCESS] Finished sync for mailbox ${mailBoxId}`);
       await this.checkLowMailboxSpace(mailBox);
+
+      // ── Notify Flutter to refresh emails via WebSocket ──────────────────────
+      this.notificationsService.emitEvent(mailBox.userId, 'mailbox_sync_complete', {
+        mailBoxId,
+        success: true,
+      });
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -138,6 +158,11 @@ export class EmailSyncProcessor extends WorkerHost {
           message: `Sync failed for ${mailBox.emailAddress}: ${errorMessage}`,
           mailBoxId: mailBox.id,
         });
+        // Dismiss the syncing indicator in Flutter
+        this.notificationsService.emitEvent(mailBox.userId, 'mailbox_sync_complete', {
+          mailBoxId,
+          success: false,
+        });
       }
       throw err;
     }
@@ -149,6 +174,7 @@ export class EmailSyncProcessor extends WorkerHost {
 
   private async syncGmail(mailBox: {
     id: number; userId: number; emailAddress: string | null;
+    lastSyncedAt: Date | null;
     folders: { id: number; remoteId: string; type: string }[];
     oauthToken: { accessTokenEncrypted: string; refreshTokenEncrypted: string } | null;
   }) {
@@ -169,15 +195,42 @@ export class EmailSyncProcessor extends WorkerHost {
       SPAM:  'SPAM',
     };
 
+    // Determine if this is a first-ever sync by checking actual email count in DB
+    const emailCount = await this.prisma.email.count({ where: { mailBoxId: mailBox.id } });
+    const isFirstSync = emailCount === 0;
+
+    // Total email budget shared across all folders
+    const TOTAL_LIMIT = 100;
+
+    // We removed the 'after' query filter to avoid "sync gaps" caused by the 100-email limit.
+    // Instead, we always fetch the latest 100 messages and let processGmailMessage handle deduplication.
+    const query: string | undefined = undefined;
+    this.logger.log(`[SYNC] Fetching latest ${TOTAL_LIMIT} messages for mailbox ${mailBox.id} (Deduplication handled per-message)`);
+    // Per-folder limits (must sum to TOTAL_LIMIT)
+    const folderLimits: Record<string, number> = {
+      INBOX: 70,
+      SENT:  20,
+      SPAM:  10,
+    };
+    let fetchedTotal = 0;
+
     for (const [folderType, labelId] of Object.entries(labelMap)) {
-      let folder = mailBox.folders.find(f => f.type === folderType);
+      if (fetchedTotal >= TOTAL_LIMIT) break;
+
+      // ── Use upsert logic to prevent duplicate folder creation ──────────────
+      let folder = await this.prisma.folder.findFirst({
+        where: { mailBoxId: mailBox.id, type: folderType as FolderType },
+      });
       if (!folder) {
         folder = await this.prisma.folder.create({
           data: { mailBoxId: mailBox.id, name: folderType.toLowerCase(), type: folderType as FolderType, remoteId: labelId },
         });
       }
 
-      const { messages } = await this.gmailProvider.listMessages(gmail, 'me', [labelId], 1000);
+      const remaining = Math.min(folderLimits[folderType] ?? 10, TOTAL_LIMIT - fetchedTotal);
+      const { messages } = await this.gmailProvider.listMessages(gmail, 'me', [labelId], remaining, undefined, query);
+
+      this.logger.log(`[SYNC] Found ${messages.length} messages in label ${labelId} (budget: ${remaining})`);
 
       for (const msg of messages) {
         const full = await this.gmailProvider.getMessage(gmail, 'me', msg.id);
@@ -187,6 +240,8 @@ export class EmailSyncProcessor extends WorkerHost {
           full as any,
           gmail,
         );
+        fetchedTotal++;
+        if (fetchedTotal >= TOTAL_LIMIT) break;
       }
     }
   }
@@ -274,6 +329,7 @@ export class EmailSyncProcessor extends WorkerHost {
 
   private async syncOutlook(mailBox: {
     id: number; userId: number; emailAddress: string | null;
+    lastSyncedAt: Date | null;
     folders: { id: number; remoteId: string; type: string }[];
     oauthToken: { accessTokenEncrypted: string; refreshTokenEncrypted: string } | null;
   }) {
@@ -454,25 +510,29 @@ export class EmailSyncProcessor extends WorkerHost {
     const folderId  = folder.id;
     const messageId = data.messageId;
 
-    // ── 1. Check if email already exists ──────────────────────────────────────
-    const existing = await this.prisma.email.findUnique({
-      where: { mailBoxId_folderId_messageId: { mailBoxId, folderId, messageId } },
+    // ── 1. Check if email already exists in ANY folder in this mailbox ─────────
+    const existing = await this.prisma.email.findFirst({
+      where: { mailBoxId, messageId },
     });
 
     if (existing) {
+      // If it exists but in a different folder, and the current folder is "better" (e.g. INBOX vs TRASH), 
+      // we might want to update the folderId. But for now, just sync flags.
       await this.prisma.email.update({
         where: { id: existing.id },
         data: {
           isRead:    data.isRead,
           isFlagged: data.isFlagged,
+          // If we found it in a different folder during sync, we keep the existing folder 
+          // to avoid "moving" emails unexpectedly during sync. Security pipeline will handle 
+          // moving to SPAM/PHISHING if needed.
         },
       });
       return;
     }
-    // ── 2. Upsert email ────────────────────────────────────────────────────────
-    const email = await this.prisma.email.upsert({
-      where:  { mailBoxId_folderId_messageId: { mailBoxId, folderId, messageId } },
-      create: {
+    // ── 2. Create email ────────────────────────────────────────────────────────
+    const email = await this.prisma.email.create({
+      data: {
         mailBoxId, folderId, messageId,
         subject:   data.subject,
         fromAddr:  data.fromAddr,
@@ -486,10 +546,6 @@ export class EmailSyncProcessor extends WorkerHost {
         isFlagged: data.isFlagged,
         isSpam:    data.isSpam,
         receivedAt: data.receivedAt,
-      },
-      update: {
-        isRead:    data.isRead,
-        isFlagged: data.isFlagged,
       },
     });
 

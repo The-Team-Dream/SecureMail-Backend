@@ -9,10 +9,15 @@ import { FolderType } from '@prisma/client';
 import { ReportType } from './dto/report-email.dto';
 import { TargetFolderType } from './dto/reclassify-email.dto';
 
+import { MailboxesService } from '../mailboxes.service';
+import { forwardRef, Inject } from '@nestjs/common';
+
 @Injectable()
 export class EmailsService {
   constructor(
     private prisma: PrismaService,
+    @Inject(forwardRef(() => MailboxesService))
+    private mailboxesService: MailboxesService,
   ) {}
 
   async ensureMailboxAccess(userId: number, mailboxId: number) {
@@ -235,6 +240,7 @@ export class EmailsService {
     await this.ensureMailboxAccess(userId, mailboxId);
     const email = await this.prisma.email.findFirst({
       where: { id: emailId, mailBoxId: mailboxId },
+      include: { folder: true },
     });
     if (!email) {
       throw new NotFoundException('Email not found');
@@ -243,6 +249,38 @@ export class EmailsService {
       where: { id: emailId },
       data: { isRead: read },
     });
+
+    // Synchronize with remote provider
+    if (email.messageId && email.folder?.remoteId) {
+       await this.mailboxesService.markRemoteRead(
+         mailboxId, 
+         email.messageId, 
+         read, 
+         email.folder.remoteId
+       );
+    }
+
+    return this.findOne(userId, mailboxId, emailId);
+  }
+
+  async toggleStar(
+    userId: number,
+    mailboxId: number,
+    emailId: number,
+    starred: boolean,
+  ) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+    const email = await this.prisma.email.findFirst({
+      where: { id: emailId, mailBoxId: mailboxId },
+    });
+    if (!email) {
+      throw new NotFoundException('Email not found');
+    }
+    await this.prisma.email.update({
+      where: { id: emailId },
+      data: { isFlagged: starred },
+    });
+
     return this.findOne(userId, mailboxId, emailId);
   }
 

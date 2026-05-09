@@ -36,7 +36,7 @@ import { RetentionModule } from './retention/retention.module';
     ThrottlerModule.forRoot({
       throttlers: [
         {
-          limit: 20,
+          limit: 100,
           ttl: 60000,
         },
       ],

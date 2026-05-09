@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
 
 export class ConnectGmailDto {
   @ApiProperty({
@@ -17,4 +17,11 @@ export class ConnectGmailDto {
   @IsString()
   // @IsUrl()
   redirectUri: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional custom display name for the mailbox',
+  })
+  @IsString()
+  @IsOptional()
+  displayName?: string;
 }

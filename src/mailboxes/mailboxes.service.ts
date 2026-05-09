@@ -50,8 +50,8 @@ export class MailboxesService {
     });
   }
 
-  async getGmailAuthUrl(userId: number, redirectUri: string) {
-    const state = Buffer.from(JSON.stringify({ userId })).toString('base64url');
+  async getGmailAuthUrl(userId: number, redirectUri: string, clientType = 'web') {
+    const state = Buffer.from(JSON.stringify({ userId, clientType })).toString('base64url');
     return {
       url: this.gmailProvider.getAuthUrl(redirectUri, state),
     };
@@ -92,7 +92,7 @@ export class MailboxesService {
         userId,
         provider: EmailProviders.GMAIL,
         emailAddress: email,
-        displayName: email.split('@')[0],
+        displayName: dto.displayName || email.split('@')[0],
         oauthToken: {
           create: {
             provider: 'gmail',
@@ -111,10 +111,10 @@ export class MailboxesService {
 
     return mailBox;
 
-  }
+  }  
 
-  async getOutlookAuthUrl(userId: number, redirectUri: string) {
-    const state = Buffer.from(JSON.stringify({ userId })).toString('base64url');
+  async getOutlookAuthUrl(userId: number, redirectUri: string, clientType = 'web') {
+    const state = Buffer.from(JSON.stringify({ userId, clientType })).toString('base64url');
     return {
       url: this.outlookProvider.getAuthUrl(redirectUri, state),
     };
@@ -149,7 +149,7 @@ export class MailboxesService {
         userId,
         provider: EmailProviders.OUTLOOK,
         emailAddress: email,
-        displayName: email.split('@')[0],
+        displayName: dto.displayName || email.split('@')[0],
         oauthToken: {
           create: {
             provider: 'outlook',
@@ -306,7 +306,18 @@ export class MailboxesService {
   }
 
   async remove(userId: number, id: number) {
-    await this.findOne(userId, id);
+    const mailBox = await this.prisma.mailBox.findFirst({
+      where: { id, userId },
+      include: { oauthToken: true },
+    });
+    if (!mailBox) {
+      throw new NotFoundException('Mailbox not found');
+    }
+
+    if (mailBox.provider === EmailProviders.GMAIL && mailBox.oauthToken) {
+      await this.gmailProvider.revokeToken(mailBox.oauthToken.refreshTokenEncrypted);
+    }
+
     await this.prisma.mailBox.delete({ where: { id } });
     return { message: 'Mailbox disconnected successfully' };
   }
@@ -391,5 +402,67 @@ export class MailboxesService {
         pass: this.encryption.decrypt(mb.imapConfig.passwordEncrypted),
       },
     };
+  }
+
+  async markRemoteRead(mailboxId: number, messageId: string, read: boolean, folderRemoteId: string) {
+    const mailbox = await this.prisma.mailBox.findUnique({
+      where: { id: mailboxId },
+      include: { oauthToken: true, imapConfig: true },
+    });
+    if (!mailbox) return;
+
+    try {
+      if (mailbox.provider === EmailProviders.GMAIL && mailbox.oauthToken) {
+        const tokens = await this.getGmailTokens(mailboxId);
+        if (tokens) {
+          const gmail = await this.gmailProvider.getGmailClient(
+            this.encryption.encrypt(tokens.accessToken),
+            this.encryption.encrypt(tokens.refreshToken),
+          );
+          await this.gmailProvider.modifyLabels(
+            gmail,
+            'me',
+            messageId,
+            read ? [] : ['UNREAD'],
+            read ? ['UNREAD'] : [],
+          );
+        }
+      } else if (mailbox.provider === EmailProviders.OUTLOOK && mailbox.oauthToken) {
+        const tokens = await this.getOutlookTokens(mailboxId);
+        if (tokens) {
+          const client = this.outlookProvider.getGraphClient(tokens.accessToken);
+          await this.outlookProvider.updateMessage(client, messageId, { isRead: read });
+        }
+      } else if (mailbox.provider === EmailProviders.CUSTOM && mailbox.imapConfig) {
+        const creds = await this.getImapCredentials(mailboxId);
+        if (creds) {
+          const client = await this.imapProvider.connect(creds);
+          try {
+            // For IMAP, messageId usually corresponds to UID if we saved it correctly,
+            // but our sync process uses envelope.messageId as messageId in DB.
+            // Wait, we need the UID to update flags in IMAP.
+            // If the messageId in DB is not the UID, we have a problem.
+            // Let's assume for IMAP we might need a search or we saved UID in some way.
+            // Actually, in imap.provider.ts, messageId was: msg.envelope.messageId ?? `imap-${mailBox.id}-${folder.id}-${msg.uid}`
+            // This is not reliable for updates. 
+            // TODO: For IMAP, we should ideally store the UID.
+            // For now, we'll skip IMAP remote mark read or try to find by messageId.
+            const lock = await client.getMailboxLock(folderRemoteId);
+            try {
+               const search = await client.search({ header: { 'Message-ID': messageId } }, { uid: true });
+               if (search && search.length > 0) { 
+                 await this.imapProvider.setMessageFlags(client, folderRemoteId, search[0], ['\\Seen'], read ? 'add' : 'remove');
+               }
+            } finally {
+              lock.release();
+            }
+          } finally {
+            await client.logout();
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[MailboxesService] Failed to mark remote email as read: ${err}`);
+    }
   }
 }

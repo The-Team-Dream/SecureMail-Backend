@@ -167,6 +167,10 @@ export class OutlookProvider {
     return res.value ?? [];
   }
 
+  async updateMessage(client: Client, messageId: string, data: any) {
+    return client.api(`/me/messages/${messageId}`).patch(data);
+  }
+
   getFolderMapping(): Record<string, string> {
     return {
       inbox: 'inbox',

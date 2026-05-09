@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -25,6 +26,7 @@ import { ConnectGmailDto } from './dto/connect-gmail.dto';
 import { ConnectOutlookDto } from './dto/connect-outlook.dto';
 import { ConnectImapDto } from './dto/connect-imap.dto';
 import { UpdateMailboxDto } from './dto/update-mailbox.dto';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('mailboxes')
 @ApiStandardErrorResponses()
@@ -50,22 +52,46 @@ export class MailboxesController {
   getGmailAuthUrl(
     @Req() req: { user: { id: number } },
     @Query('redirectUri') redirectUri: string,
+    @Query('clientType') clientType?: string,
   ) {
     return this.mailboxesService.getGmailAuthUrl(
       req.user.id,
       redirectUri || `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/mailboxes/gmail/callback`,
+      clientType as 'web' | 'mobile' || 'web',
     );
   }
 
   @Post('gmail')
-  @ApiOperation({ summary: 'Connect Gmail via OAuth2' })
+  @ApiOperation({ summary: 'Connect Gmail via OAuth2 (Mobile/Web)' })
   @ApiResponse({ status: 201, description: 'Gmail mailbox connected' })
-  @ApiResponse({ status: 400, description: 'Invalid authorization code' })
   connectGmail(
     @Req() req: { user: { id: number } },
     @Body() dto: ConnectGmailDto,
   ) {
     return this.mailboxesService.connectGmail(req.user.id, dto);
+  }
+
+  @Public()
+  @Get('gmail/callback')
+  @ApiOperation({ summary: 'Gmail OAuth2 callback' })
+  async gmailCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: any,
+  ) {
+    const decodedState = this.parseState(state);
+    const userId = decodedState?.userId;
+    const clientType = decodedState?.clientType ?? 'web';
+
+    // استخدام الـ redirectUri الافتراضي للباكند
+    const redirectUri = `${process.env.BACKEND_URL ?? 'http://localhost:3000'}/mailboxes/gmail/callback`;
+    
+    await this.mailboxesService.connectGmail(userId, { code, redirectUri });
+
+    if (clientType === 'mobile') {
+      return res.redirect(`securemail://app/mailboxes/gmail/callback?success=true`);
+    }
+    return res.redirect(`${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/mailboxes/gmail/callback?success=true`);
   }
 
   @Get('outlook/auth-url')
@@ -74,22 +100,55 @@ export class MailboxesController {
   getOutlookAuthUrl(
     @Req() req: { user: { id: number } },
     @Query('redirectUri') redirectUri: string,
+    @Query('clientType') clientType?: string,
   ) {
     return this.mailboxesService.getOutlookAuthUrl(
       req.user.id,
       redirectUri || `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/mailboxes/outlook/callback`,
+      clientType as 'web' | 'mobile' || 'web',
     );
   }
 
   @Post('outlook')
-  @ApiOperation({ summary: 'Connect Outlook via OAuth2' })
+  @ApiOperation({ summary: 'Connect Outlook via OAuth2 (Mobile/Web)' })
   @ApiResponse({ status: 201, description: 'Outlook mailbox connected' })
-  @ApiResponse({ status: 400, description: 'Invalid authorization code' })
   connectOutlook(
     @Req() req: { user: { id: number } },
     @Body() dto: ConnectOutlookDto,
   ) {
     return this.mailboxesService.connectOutlook(req.user.id, dto);
+  }
+
+  @Public()
+  @Get('outlook/callback')
+  @ApiOperation({ summary: 'Outlook OAuth2 callback' })
+  async outlookCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: any,
+  ) {
+    const decodedState = this.parseState(state);
+    const userId = decodedState?.userId;
+    const clientType = decodedState?.clientType ?? 'web';
+
+    const redirectUri = `${process.env.BACKEND_URL ?? 'http://localhost:3000'}/mailboxes/outlook/callback`;
+    
+    await this.mailboxesService.connectOutlook(userId, { code, redirectUri });
+
+    if (clientType === 'mobile') {
+      return res.redirect(`securemail://app/mailboxes/outlook/callback?success=true`);
+    }
+    return res.redirect(`${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/mailboxes/outlook/callback?success=true`);
+  }
+
+  private parseState(state?: string): Record<string, any> | null {
+    if (!state) return null;
+    try {
+      const jsonStr = Buffer.from(state, 'base64url').toString();
+      return JSON.parse(jsonStr);
+    } catch {
+      return null;
+    }
   }
 
   @Post('imap')

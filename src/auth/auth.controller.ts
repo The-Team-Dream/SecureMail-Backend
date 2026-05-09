@@ -4,6 +4,7 @@ import {
     Get,
     Headers,
     Post,
+    Query,
     Req,
     Res,
     UnauthorizedException,
@@ -21,6 +22,7 @@ import {
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import { RegisterDto } from './dto/register.dto';
+import { GoogleMobileLoginDto } from './dto/google-mobile-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgetPasswordDto } from './dto/forgetpassword.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -30,12 +32,13 @@ import { Verify2FADto } from './dto/verify-2fa.dto';
 import { TokenGuard } from './guards/auth.guard';
 import { ApiOkWrapped, ApiStandardErrorResponses } from 'src/common/swagger';
 import { ApiErrorResponseDto } from 'src/common/swagger/api-error-response.dto';
+import { Public } from './decorators/public.decorator';
 
 @ApiTags('auth')
 @ApiStandardErrorResponses()
 @Controller('auth')
 export class AuthController {
-    constructor(private authService: AuthService) {}
+    constructor(private authService: AuthService) { }
 
     @Post('register')
     @ApiOperation({ summary: 'Register a new local account' })
@@ -165,7 +168,7 @@ export class AuthController {
         message: 'If email exists, reset link will be sent',
     })
     forgetPassword(@Body() data: ForgetPasswordDto) {
-        return this.authService.forgetPassword(data.email);
+        return this.authService.forgetPassword(data.email, data.clientType);
     }
 
     @Post('reset-password')
@@ -204,22 +207,34 @@ export class AuthController {
     @UseGuards(AuthGuard('google'))
     @ApiOperation({
         summary: 'Start Google OAuth',
-        description: 'Browser redirect to Google; not used as JSON API from mobile.',
+        description: 'Standard web-based redirect flow.',
     })
-    googleLogin() {}
+    googleLogin() { }
+
+    @Post('google/mobile')
+    @ApiOperation({ summary: 'Google Sign-In for Mobile' })
+    async googleMobileLogin(
+        @Body() body: GoogleMobileLoginDto,
+        @Req() req: any,
+    ) {
+        const forwarded = req.headers['x-forwarded-for'];
+        const ip = req.ip ?? (typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : forwarded?.[0]) ?? 'unknown';
+        const sessionContext = {
+            ipAddress: ip,
+            userAgent: req.headers['user-agent'] ?? 'mobile-app',
+        };
+
+        return this.authService.googleLoginMobile(body.idToken, sessionContext);
+    }
 
     @Get('google/callback')
     @UseGuards(AuthGuard('google'))
     @ApiOperation({ summary: 'Google OAuth callback (redirect)' })
     @ApiResponse({ status: 302, description: 'Redirect to frontend with token query param' })
     async googleCallback(
-        @Req()
-        req: {
-            user: { id: number };
-            ip?: string;
-            headers: { 'user-agent'?: string; 'x-forwarded-for'?: string };
-        },
-        @Res() res: { redirect: (url: string) => void },
+        @Req() req: any,
+        @Res() res: any,
+        @Query('state') state?: string,
     ) {
         const forwarded = req.headers['x-forwarded-for'];
         const ip =
@@ -230,8 +245,39 @@ export class AuthController {
             ipAddress: ip,
             userAgent: req.headers['user-agent'] ?? '',
         };
+
+        const decodedState = this.parseState(state);
+        const clientType = decodedState?.clientType ?? 'web';
+
         const token = await this.authService.generateJWT(req.user, sessionContext);
+
+        if (clientType === 'mobile') {
+            return res.redirect(`securemail://app/oauth-success?token=${token}`);
+        }
+
         const base = process.env.FRONTEND_URL ?? 'http://localhost:3001';
         return res.redirect(`${base}/oauth-success?token=${token}`);
+    }
+
+    @Public()
+    @Get('redirect')
+    @ApiOperation({ summary: 'Deep link bridge for email clients' })
+    async deepLinkRedirect(
+        @Query('url') url: string,
+        @Res() res: any,
+    ) {
+        // التحويل من رابط HTTPS إلى رابط التطبيق (Deep Link)
+        // الإيميلات بتقبل HTTPS بس، فإحنا بنخليهم يضغطوا على ده والباكند يحولهم للتطبيق
+        return res.redirect(url);
+    }
+
+    private parseState(state?: string): Record<string, any> | null {
+        if (!state) return null;
+        try {
+            const jsonStr = Buffer.from(state, 'base64url').toString();
+            return JSON.parse(jsonStr);
+        } catch {
+            return null;
+        }
     }
 }

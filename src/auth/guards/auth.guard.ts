@@ -3,6 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { PrismaService } from 'src/prisma.service';
 import { AuthService } from '../auth.service';
+import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 @Injectable()
 export class TokenGuard implements CanActivate {
@@ -11,6 +13,7 @@ export class TokenGuard implements CanActivate {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private authService: AuthService,
+    private reflector: Reflector,
   ) { }
 
   private extractTokenFromHeader(request: Request): string | undefined {
@@ -19,6 +22,14 @@ export class TokenGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) {
+      return true;
+    }
+
     const request = context.switchToHttp().getRequest()
     const token = this.extractTokenFromHeader(request)
     if (!token) {

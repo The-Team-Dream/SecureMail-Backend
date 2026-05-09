@@ -8,9 +8,9 @@ import { resetPasswordTemplate } from './templates/resetpassword';
 @Injectable()
 export class NodeMailerService {
     constructor(private mailerService: MailerService) { }
-    
+
     async welcome(user: User) {
-        
+
         await this.mailerService.sendMail({
             to: user.email,
             from: '"Secure Mail" <support@securemail.com>',
@@ -28,13 +28,26 @@ export class NodeMailerService {
         });
     }
 
-    async resetPassword(user: User, token: string) {
-        const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    async resetPassword(user: User, tokenOrLink: string, clientType: 'web' | 'mobile' = 'web') {
+        let contentLink: string;
+
+        if (clientType === 'mobile') {
+            // للموبايل نستخدم رابط بريدج (HTTPS) لكي يقبل تطبيق الإيميل الضغط عليه
+            const deepLink = `securemail://app/reset-password?token=${tokenOrLink}`;
+            const backendUrl = process.env.BACKEND_URL ?? 'http://10.0.0.106:3000';
+            contentLink = `${backendUrl}/auth/redirect?url=${encodeURIComponent(deepLink)}`;
+        } else {
+            // للويب نستخدم الرابط الكامل
+            contentLink = tokenOrLink.startsWith('http')
+                ? tokenOrLink
+                : `${process.env.FRONTEND_URL}/reset-password?token=${tokenOrLink}`;
+        }
+
         await this.mailerService.sendMail({
             to: user.email,
             from: '"Secure Mail" <support@securemail.com>',
             subject: 'Welcome to SecureMail App! Reset your Password',
-            html: resetPasswordTemplate(user.username ?? 'User', resetLink)
+            html: resetPasswordTemplate(user.username ?? 'User', contentLink)
         });
     }
 }

@@ -22,7 +22,7 @@ export class AppService {
       redis: 'unknown',
       ai_agent: 'unknown',
       malware_scanner: 'unknown',
-    };
+    }; 
 
     // 1. Check Database
     try {

@@ -12,6 +12,7 @@ import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { SessionsService } from 'src/sessions/sessions.service';
 import { EncryptionService } from 'src/common/encryption/encryption.service';
+import { OAuth2Client } from 'google-auth-library';
 
 const SESSION_EXPIRY_DAYS = 7;
 
@@ -25,6 +26,8 @@ export class AuthService {
         private encryptionService: EncryptionService,
         @InjectRedis() private readonly redis: Redis
     ) { }
+
+    private googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
     async generateJWT(
         user: Pick<User, 'id'>,
@@ -164,6 +167,24 @@ export class AuthService {
         if (!passwordValid) {
             throw new UnauthorizedException("Invalid credentials")
         }
+
+        // ── Email Verification Check ───────────────────────────── 
+        if (!user.isVerified) {
+            // Resend a fresh OTP automatically
+            const otp = await this.generateOTP();
+            const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+            await this.prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    otpCode: hashedOtp,
+                    otpExpires: new Date(Date.now() + 15 * 60 * 1000),
+                },
+            });
+            await this.mailerService.sendOTP(user, otp);
+            // Return a special flag so the client redirects to OTP screen
+            return { requiresVerification: true, email: user.email };
+        }
+
         if (user.totpEnabled) {
             const tempToken = await this.jwtService.signAsync(
                 { userId: user.id, pending2FA: true },
@@ -240,7 +261,7 @@ export class AuthService {
         return { message: "Account verified successfully" }
     }
 
-    async forgetPassword(email: string) {
+    async forgetPassword(email: string, clientType: 'web' | 'mobile' = 'web') {
         const user = await this.prisma.user.findUnique({
             where: { email },
         });
@@ -260,7 +281,7 @@ export class AuthService {
                 resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000),
             },
         });
-        await this.mailerService.resetPassword(user, resetToken)
+        await this.mailerService.resetPassword(user, resetToken, clientType);
         return { message: 'If email exists, reset link will be sent' };
     }
 
@@ -295,6 +316,33 @@ export class AuthService {
             },
         });
         return { message: 'Password updated successfully' };
+    }
+
+    async googleLoginMobile(idToken: string, sessionContext?: { ipAddress: string; userAgent: string }) {
+        try {
+            const ticket = await this.googleClient.verifyIdToken({
+                idToken,
+                audience: process.env.GOOGLE_CLIENT_ID,
+            });
+            const payload = ticket.getPayload();
+            if (!payload) throw new UnauthorizedException('Invalid Google token');
+
+            const user = await this.validateGoogleUser({
+                googleId: payload.sub,
+                provider: 'google',
+                email: payload.email!,
+                firstName: payload.given_name,
+                lastName: payload.family_name,
+                avatar: payload.picture,
+                accessToken: '',
+                refreshToken: '',
+            });
+
+            const token = await this.generateJWT(user, sessionContext);
+            return { token };
+        } catch (error) {
+            throw new UnauthorizedException('Google authentication failed');
+        }
     }
     async validateGoogleUser(data: {
         googleId: string;

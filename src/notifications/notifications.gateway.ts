@@ -59,4 +59,9 @@ export class NotificationsGateway
     const room = `${USER_ROOM_PREFIX}${userId}`;
     this.server.to(room).emit('notification', payload);
   }
+
+  emitEventToUser(userId: number, eventName: string, payload: unknown): void {
+    const room = `${USER_ROOM_PREFIX}${userId}`;
+    this.server.to(room).emit(eventName, payload);
+  }
 }

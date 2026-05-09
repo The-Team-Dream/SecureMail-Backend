@@ -48,6 +48,7 @@ import { SearchQueryDto } from './dto/search-query.dto';
 import { MarkReadDto } from './dto/mark-read.dto';
 import { ReportEmailDto } from './dto/report-email.dto';
 import { ReclassifyEmailDto } from './dto/reclassify-email.dto';
+import { ToggleStarDto } from './dto/toggle-star.dto';
 import { SendEmailDto } from './dto/send-email.dto';
 import { ReplyEmailDto } from './dto/reply-email.dto';
 import { ForwardEmailDto } from './dto/forward-email.dto';
@@ -321,6 +322,24 @@ export class EmailsController {
     @Body() dto: MarkReadDto,
   ) {
     return this.emailsService.markRead(req.user.id, mailboxId, id, dto.read);
+  }
+
+  @Patch('emails/:id/star')
+  @ApiOperation({
+    summary:     'Toggle email star (flag)',
+    description: 'Updates the starred (flagged) status of an email.',
+  })
+  @ApiParam({ name: 'id', description: 'Email ID', example: 42, type: Number })
+  @ApiResponse({ status: 200, description: 'Email star status updated successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Email not found in this mailbox' })
+  toggleStar(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ToggleStarDto,
+  ) {
+    return this.emailsService.toggleStar(req.user.id, mailboxId, id, dto.starred);
   }
 
   @Delete('emails/:id')

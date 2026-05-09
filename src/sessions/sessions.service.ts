@@ -34,8 +34,21 @@ export class SessionsService {
   parseDeviceInfo(userAgent: string): ParsedDeviceInfo {
     const parser = new UAParser(userAgent);
     const result = parser.getResult();
-    const os = result.os?.name ?? null;
-    const browser = result.browser?.name ?? null;
+    let os = result.os?.name ?? null;
+    let browser = result.browser?.name ?? null;
+
+    // Fallback for Flutter/Dart
+    if (!os && userAgent.toLowerCase().includes('dart')) {
+      os = 'Android/iOS';
+      browser = 'SecureMail App';
+    }
+
+    // Fallback for Postman
+    if (!os && userAgent.toLowerCase().includes('postman')) {
+      os = 'Desktop';
+      browser = 'Postman';
+    }
+
     return { os, browser };
   }
 
@@ -105,10 +118,23 @@ export class SessionsService {
       },
     });
 
-    return sessions.map((s) => ({
-      ...s,
-      isCurrent: s.id === currentSessionId,
-    }));
+    return sessions.map((s) => {
+      let { deviceOs, deviceBrowser } = s;
+
+      // Apply fallback if DB has nulls
+      if (!deviceOs || !deviceBrowser) {
+        const parsed = this.parseDeviceInfo(s.userAgent);
+        deviceOs = deviceOs ?? parsed.os;
+        deviceBrowser = deviceBrowser ?? parsed.browser;
+      }
+
+      return {
+        ...s,
+        deviceOs,
+        deviceBrowser,
+        isCurrent: s.id === currentSessionId,
+      };
+    });
   }
 
   async revokeSession(sessionId: number, userId: number): Promise<void> {
