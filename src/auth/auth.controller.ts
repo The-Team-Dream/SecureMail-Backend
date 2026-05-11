@@ -256,7 +256,7 @@ export class AuthController {
         }
 
         const base = process.env.FRONTEND_URL ?? 'http://localhost:3001';
-        return res.redirect(`${base}/oauth-success?token=${token}`);
+        return res.redirect(`${base}/auth/callback?token=${token}`);
     }
 
     @Public()

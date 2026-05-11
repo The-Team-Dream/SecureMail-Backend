@@ -363,6 +363,7 @@ export class AuthService {
             user = await this.prisma.user.update({
                 where: { email: data.email },
                 data: {
+                    isVerified: true,
                     oauthId: data.googleId,
                     oauthAccessToken: this.encryptionService.encrypt(data.accessToken),
                     oauthRefreshToken: data.refreshToken

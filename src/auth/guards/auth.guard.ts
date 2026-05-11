@@ -70,8 +70,12 @@ export class TokenGuard implements CanActivate {
       if (payload.sessionId) {
         request['sessionId'] = payload.sessionId
       }
-    } catch {
-      throw new UnauthorizedException()
+    } catch (error) {
+      if (error instanceof ForbiddenException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      console.error('TokenGuard verification failed:', error);
+      throw new UnauthorizedException('Invalid or expired token');
     }
     return true;
   }
