@@ -211,6 +211,17 @@ export class GmailProvider {
     });
   }
 
+  async trashMessage(
+    gmail: gmail_v1.Gmail,
+    userId: string,
+    messageId: string,
+  ): Promise<void> {
+    await gmail.users.messages.trash({
+      userId,
+      id: messageId,
+    });
+  }
+
   getLabelMapping(): Record<string, string> {
     return {
       INBOX: 'INBOX',

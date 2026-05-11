@@ -59,7 +59,7 @@ export class MailboxesController {
       redirectUri || `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/mailboxes/gmail/callback`,
       clientType as 'web' | 'mobile' || 'web',
     );
-  }
+  } 
 
   @Post('gmail')
   @ApiOperation({ summary: 'Connect Gmail via OAuth2 (Mobile/Web)' })

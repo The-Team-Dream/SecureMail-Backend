@@ -465,4 +465,42 @@ export class MailboxesService {
       console.error(`[MailboxesService] Failed to mark remote email as read: ${err}`);
     }
   }
+  async deleteRemoteEmail(mailboxId: number, messageId: string, folderRemoteId: string) {
+    const mailbox = await this.prisma.mailBox.findUnique({
+      where: { id: mailboxId },
+      include: { oauthToken: true, imapConfig: true },
+    });
+    if (!mailbox) return;
+
+    try {
+      if (mailbox.provider === EmailProviders.GMAIL && mailbox.oauthToken) {
+        const tokens = await this.getGmailTokens(mailboxId);
+        if (tokens) {
+          const gmail = await this.gmailProvider.getGmailClient(
+            this.encryption.encrypt(tokens.accessToken),
+            this.encryption.encrypt(tokens.refreshToken),
+          );
+          await this.gmailProvider.trashMessage(gmail, 'me', messageId);
+        }
+      } else if (mailbox.provider === EmailProviders.OUTLOOK && mailbox.oauthToken) {
+        const tokens = await this.getOutlookTokens(mailboxId);
+        if (tokens) {
+          const client = this.outlookProvider.getGraphClient(tokens.accessToken);
+          await this.outlookProvider.trashMessage(client, messageId);
+        }
+      } else if (mailbox.provider === EmailProviders.CUSTOM && mailbox.imapConfig) {
+        const creds = await this.getImapCredentials(mailboxId);
+        if (creds) {
+          const client = await this.imapProvider.connect(creds);
+          try {
+            await this.imapProvider.trashMessage(client, folderRemoteId, messageId);
+          } finally {
+            await client.logout();
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[MailboxesService] Failed to delete remote email: ${err}`);
+    }
+  }
 }

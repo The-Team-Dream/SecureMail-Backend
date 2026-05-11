@@ -303,14 +303,25 @@ export class EmailsService {
         where: { id: emailId },
         data: { folderId: trashFolder.id },
       });
-      return { message: 'Email moved to trash', action: 'trashed' as const, emailId };
+    } else {
+      await this.prisma.email.delete({ where: { id: emailId } });
     }
 
-    await this.prisma.email.delete({ where: { id: emailId } });
-    return { message: 'Email deleted', action: 'deleted' as const, emailId };
+    // Synchronize with remote provider
+    if (email.messageId && email.folder?.remoteId) {
+      await this.mailboxesService.deleteRemoteEmail(
+        mailboxId,
+        email.messageId,
+        email.folder.remoteId
+      );
+    }
+
+    return trashFolder
+      ? { message: 'Email moved to trash', action: 'trashed' as const, emailId }
+      : { message: 'Email deleted', action: 'deleted' as const, emailId };
   }
 
-  async report(
+  async report( 
     userId: number,
     mailboxId: number,
     emailId: number,
@@ -430,10 +441,15 @@ export class EmailsService {
         emailId: emailId,
         email: { mailBoxId: mailboxId }
       },
+      include: { email: { select: { analysisStatus: true } } },
     });
 
     if (!attachment) {
       throw new NotFoundException('Attachment not found');
+    }
+
+    if (attachment.email.analysisStatus === 'PENDING') {
+      throw new BadRequestException('Cannot download attachment while email is still undergoing security analysis');
     }
 
     // If it's a Cloudinary URL or remote URL, return redirect directive

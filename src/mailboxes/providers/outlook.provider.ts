@@ -171,11 +171,15 @@ export class OutlookProvider {
     return client.api(`/me/messages/${messageId}`).patch(data);
   }
 
+  async trashMessage(client: Client, messageId: string) {
+    return client.api(`/me/messages/${messageId}`).delete();
+  }
+
   getFolderMapping(): Record<string, string> {
     return {
       inbox: 'inbox',
       sentitems: 'sentitems',
       junkemail: 'junkemail',
-    };
+    }; 
   }
 }

@@ -184,6 +184,20 @@ export class ImapProvider {
     }
   }
 
+  async trashMessage(client: ImapFlow, mailbox: string, messageId: string): Promise<void> {
+    const lock = await client.getMailboxLock(mailbox);
+    try {
+      // Search for the message by Message-ID header to get the UID
+      const search = await client.search({ header: { 'Message-ID': messageId } }, { uid: true });
+      if (search && search.length > 0) {
+        // Apply the \Deleted flag
+        await client.messageFlagsAdd({ uid: search[0] }, ['\\Deleted'], { uid: true });
+      }
+    } finally {
+      lock.release();
+    }
+  }
+
   getFolderMapping(): Record<string, string> {
     return {
       INBOX: 'INBOX',

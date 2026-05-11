@@ -203,6 +203,7 @@ model Email {
   malwareVerdict  String?         @map("malware_verdict")
   malwareSeverity String?         @map("malware_severity")
   aiReport        Json?           @map("ai_report")
+  analysisStatus  AnalysisStatus  @default(PENDING) @map("analysis_status")
   inReplyTo       String?         @map("in_reply_to")
   references      String?         @map("references")
   receivedAt      DateTime
@@ -218,6 +219,12 @@ model Email {
   @@index([messageId])
   // ARCH FIX: index for Rule 13 first-contact query performance
   @@index([mailBoxId, fromAddr])
+}
+
+enum AnalysisStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }
 
 model EmailFlag {

@@ -24,6 +24,8 @@ import { ImapProvider }       from './providers/imap.provider';
 import { EMAIL_SYNC_QUEUE }   from './email-sync.service';
 import { SecurityModule }     from '../security/security.module';
 import { EmailsModule }       from './emails/emails.module';
+import { QUEUE_EMAIL_PROCESS } from '../common/constants/queues';
+import { EmailProcessProcessor } from './email-process.processor';
 
 @Module({
   imports: [
@@ -41,6 +43,14 @@ import { EmailsModule }       from './emails/emails.module';
         backoff: { type: 'exponential', delay: 5000 },
       },
     }),
+    BullModule.registerQueue({
+      name: QUEUE_EMAIL_PROCESS,
+      defaultJobOptions: {
+        removeOnComplete: 100,
+        attempts:         3,
+        backoff: { type: 'exponential', delay: 5000 },
+      },
+    }),
   ],
   controllers: [MailboxesController],
   providers: [
@@ -49,6 +59,10 @@ import { EmailsModule }       from './emails/emails.module';
     {
       provide:  EmailSyncProcessor,
       useClass: EmailSyncProcessor,
+    },
+    {
+      provide:  EmailProcessProcessor,
+      useClass: EmailProcessProcessor,
     },
     EmailSyncScheduler,
     GmailProvider,
