@@ -12,7 +12,7 @@ const USER_ROOM_PREFIX = 'user:';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:3001',
+    origin: process.env.NODE_ENV !== 'production' ? true : (process.env.FRONTEND_URL ?? 'http://localhost:3001'),
     credentials: true,
   },
   namespace: '/',
