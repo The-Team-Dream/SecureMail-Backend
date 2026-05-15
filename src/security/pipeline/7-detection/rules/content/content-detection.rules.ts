@@ -1,4 +1,4 @@
-﻿import { BaseDetectionRule } from '../detection-rule.interface';
+import { BaseDetectionRule } from '../detection-rule.interface';
 import { DetectionContext } from '../../rule-engine/detection-context';
 import {
   PHISHING_URGENT_PATTERNS,
@@ -182,9 +182,11 @@ export class ExcessiveCapitalizationRule extends BaseDetectionRule {
     const uppercase = text.match(/[A-Z]/g)?.length ?? 0;
     if (letters === 0) return this.notTriggered();
     const capsRatio = uppercase / letters;
-    if (capsRatio <= 0.25) return this.notTriggered();
+    // Raised from 0.25 → 0.40: normal emails (sentence starts, acronyms, names)
+    // easily exceed 25% caps. 40% is a clearer spam signal.
+    if (capsRatio <= 0.40) return this.notTriggered();
     return this.triggered(
-      `${Math.round(capsRatio * 100)}% uppercase (threshold: 30%)`
+      `${Math.round(capsRatio * 100)}% uppercase (threshold: 40%)`
     );
   }
 
@@ -200,8 +202,10 @@ export class ExcessiveExclamationRule extends BaseDetectionRule {
 
   evaluate(ctx: Readonly<DetectionContext>): RuleResult {
     const count = (ctx.parsedEmail.bodyPlain.match(/!/g) || []).length;
-    if (count <= 3) return this.notTriggered();
-    return this.triggered(`${count} exclamation marks (threshold: 3)`);
+    // Raised from 3 → 6: professional emails often use a few exclamation marks.
+    // 6+ is a stronger indicator of spam-style urgency.
+    if (count <= 6) return this.notTriggered();
+    return this.triggered(`${count} exclamation marks (threshold: 6)`);
   }
 }
 

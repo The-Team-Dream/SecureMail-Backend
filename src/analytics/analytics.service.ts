@@ -17,32 +17,79 @@ export class AnalyticsService {
   }
 
   async getOverview(userId: number) {
-    const [mailboxCount, totalEmails, phishingCount, spamCount, storageUsed] =
-      await Promise.all([
-        this.prisma.mailBox.count({ where: { userId, isActive: true } }),
-        this.prisma.email.count({
-          where: { mailBox: { userId } },
-        }),
-        this.prisma.email.count({
-          where: { mailBox: { userId }, isPhishing: true },
-        }),
-        this.prisma.email.count({
-          where: { mailBox: { userId }, isSpam: true },
-        }),
-        this.prisma.attachment.aggregate({
-          where: {
-            email: { mailBox: { userId } },
-          },
-          _sum: { size: true },
-        }),
-      ]);
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+    const [
+      mailboxCount,
+      totalEmails,
+      phishingCount,
+      spamCount,
+      malwareCount,
+      storageUsed,
+      currentPhishing,
+      prevPhishing,
+      currentSpam,
+      prevSpam,
+      currentMalware,
+      prevMalware,
+    ] = await Promise.all([
+      this.prisma.mailBox.count({ where: { userId, isActive: true } }),
+      this.prisma.email.count({
+        where: { mailBox: { userId } },
+      }),
+      this.prisma.email.count({
+        where: { mailBox: { userId }, isPhishing: true },
+      }),
+      this.prisma.email.count({
+        where: { mailBox: { userId }, isSpam: true },
+      }),
+      this.prisma.email.count({
+        where: { mailBox: { userId }, malwareVerdict: 'malicious' },
+      }),
+      this.prisma.attachment.aggregate({
+        where: {
+          email: { mailBox: { userId } },
+        },
+        _sum: { size: true },
+      }),
+      // Trends calculation
+      this.prisma.email.count({
+        where: { mailBox: { userId }, isPhishing: true, receivedAt: { gte: thirtyDaysAgo } },
+      }),
+      this.prisma.email.count({
+        where: { mailBox: { userId }, isPhishing: true, receivedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
+      }),
+      this.prisma.email.count({
+        where: { mailBox: { userId }, isSpam: true, receivedAt: { gte: thirtyDaysAgo } },
+      }),
+      this.prisma.email.count({
+        where: { mailBox: { userId }, isSpam: true, receivedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
+      }),
+      this.prisma.email.count({
+        where: { mailBox: { userId }, malwareVerdict: 'malicious', receivedAt: { gte: thirtyDaysAgo } },
+      }),
+      this.prisma.email.count({
+        where: { mailBox: { userId }, malwareVerdict: 'malicious', receivedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
+      }),
+    ]);
+
+    const calculateChange = (current: number, prev: number) => {
+      if (prev === 0) return current > 0 ? '+100%' : '0%';
+      const diff = ((current - prev) / prev) * 100;
+      return (diff >= 0 ? '+' : '') + diff.toFixed(0) + '%';
+    };
 
     return {
       totalMailboxesConnected: mailboxCount,
       totalEmails: totalEmails,
       totalPhishingDetected: phishingCount,
       totalSpamDetected: spamCount,
+      totalMalwareDetected: malwareCount,
       totalStorageUsed: storageUsed._sum.size ?? 0,
+      threatsChange: calculateChange(currentPhishing + currentSpam + currentMalware, prevPhishing + prevSpam + prevMalware),
+      phishingChange: calculateChange(currentPhishing + currentMalware, prevPhishing + prevMalware),
     };
   }
 

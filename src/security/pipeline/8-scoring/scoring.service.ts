@@ -81,7 +81,7 @@ export class ScoringService {
     const rawTotal = tier1Score + tier2Score + tier3Score;
     const finalScore = Math.min(100, rawTotal);
 
-    const riskTier = this.computeTier(finalScore);
+    const riskTier = this.computeTier(finalScore, ctx);
     const confidence = this.computeConfidence(finalScore, tier1Score, tier2Score, ctx);
 
     const isPhishing = riskTier === 'PHISHING' || riskTier === 'MALICIOUS';
@@ -231,11 +231,37 @@ export class ScoringService {
     return Math.min(95, Math.max(10, confidence));
   }
 
-  private computeTier(score: number): RiskTier {
+  /**
+   * Computes the risk tier with Signal Corroboration.
+   *
+   * A single weak rule firing alone should NOT classify an email as SPAM/SUSPICIOUS.
+   * This mirrors industry-standard approaches (Proofpoint, Mimecast) where multiple
+   * corroborating signals from different categories are required for a verdict.
+   *
+   * Corroboration is BYPASSED for PHISHING and MALICIOUS tiers (high-weight rules
+   * are inherently strong signals on their own).
+   */
+  private computeTier(score: number, ctx: DetectionContext): RiskTier {
     if (score >= RISK_THRESHOLDS.MALICIOUS) return 'MALICIOUS';
     if (score >= RISK_THRESHOLDS.PHISHING) return 'PHISHING';
-    if (score >= RISK_THRESHOLDS.SUSPICIOUS) return 'SUSPICIOUS';
-    if (score >= RISK_THRESHOLDS.SPAM) return 'SPAM';
+
+    // For borderline tiers (SPAM / SUSPICIOUS), require corroboration:
+    // at least 2 different rule categories OR 1 high-weight rule (weight >= 20)
+    if (score >= RISK_THRESHOLDS.SUSPICIOUS || score >= RISK_THRESHOLDS.SPAM) {
+      const triggeredRules = ctx.getTriggeredRules();
+      const categories = new Set(triggeredRules.map(r => r.category));
+      const hasHighWeightRule = triggeredRules.some(r => (r.originalScore + r.amplifiedScore) >= 20);
+      const hasCorroboration = categories.size >= 2 || hasHighWeightRule;
+
+      if (!hasCorroboration) {
+        // Only weak signals from a single category → treat as SAFE
+        return 'SAFE';
+      }
+
+      if (score >= RISK_THRESHOLDS.SUSPICIOUS) return 'SUSPICIOUS'; 
+      return 'SPAM';
+    }
+
     return 'SAFE';
   }
 

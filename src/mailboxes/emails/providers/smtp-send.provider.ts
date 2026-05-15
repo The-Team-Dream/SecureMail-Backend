@@ -27,7 +27,7 @@ export interface SendEmailOptions {
 
 @Injectable()
 export class SmtpSendProvider {
-  async send(config: SmtpConfig, options: SendEmailOptions): Promise<void> {
+  async send(config: SmtpConfig, options: SendEmailOptions): Promise<string> {
     const transporter: Transporter = nodemailer.createTransport({
       host: config.host,
       port: config.port,
@@ -52,6 +52,7 @@ export class SmtpSendProvider {
       })),
     };
 
-    await transporter.sendMail(mailOptions);
+    const info = await transporter.sendMail(mailOptions);
+    return info.messageId;
   }
 }

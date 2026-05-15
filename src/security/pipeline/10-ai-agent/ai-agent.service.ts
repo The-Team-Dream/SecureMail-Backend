@@ -13,7 +13,9 @@ interface AIAgentGrpcService {
     GenerateReport(request: EmailAnalysisRequestPayload): Observable<AnalysisReportPayload>;
 }
 
-const RETRYABLE = new Set<number>([status.UNAVAILABLE]);
+// UNAVAILABLE → transient network issue, retry quickly
+// RESOURCE_EXHAUSTED → quota/rate limit (429), retry after a longer back-off
+const RETRYABLE = new Set<number>([status.UNAVAILABLE, status.RESOURCE_EXHAUSTED]);
 
 function classifyGrpcFailure(err: unknown): {
     grpcCode?: number;
@@ -59,11 +61,14 @@ export class AiAgentService implements OnModuleInit {
      * Transport + contract boundary: never throws; returns discriminated outcome for the pipeline.
      */
     async generateReport(data: AiAgentGenerateInput): Promise<AiAgentGenerateOutcome> {
-        const maxBody = Math.max(
-            4096,
-            Number(process.env.AI_AGENT_MAX_BODY_CHARS ?? 120_000) || 120_000,
-        );
-        const bodyText = this.truncateUtf8(data.bodyText ?? '', maxBody);
+        // ── Smart body extraction ────────────────────────────────────────────────
+        // The AI doesn't need the full email body for security analysis.
+        // The backend rule engine already handles heavy signal extraction.
+        // We only send the most security-relevant segments to stay within quota:
+        //   • Opening (first 2,500 chars) — reveals sender intent & social engineering
+        //   • Closing (last 500 chars)    — reveals call-to-action & suspicious links
+        // This reduces token usage from ~30,000 → ~800 per large email.
+        const bodyText = this.extractSecurityRelevantBody(data.bodyText ?? '');
 
         const request: EmailAnalysisRequestPayload = {
             email_id: data.emailId ?? '',
@@ -106,8 +111,17 @@ export class AiAgentService implements OnModuleInit {
                 lastErr = err;
                 const code = (err as { code?: number })?.code;
                 if (attempt < maxRetries && code !== undefined && RETRYABLE.has(code)) {
-                    const ms = Math.min(2000, 150 * 2 ** attempt);
-                    this.logger.warn(`AI Agent gRPC retry #${attempt + 1} after code=${code}, delay=${ms}ms`);
+                    // RESOURCE_EXHAUSTED (quota/rate-limit) needs a much longer wait.
+                    // Groq resets TPM every ~2s and RPM every ~60s.
+                    // We use a longer exponential backoff capped at 15s for quota errors.
+                    const isQuota = code === status.RESOURCE_EXHAUSTED;
+                    const baseMs  = isQuota ? 3_000 : 150;
+                    const capMs   = isQuota ? 15_000 : 2_000;
+                    const ms = Math.min(capMs, baseMs * 2 ** attempt);
+                    this.logger.warn(
+                        `AI Agent gRPC retry #${attempt + 1} after code=${code} ` +
+                        `(${isQuota ? 'quota exhausted' : 'unavailable'}), delay=${ms}ms`,
+                    );
                     await new Promise<void>(resolve => setTimeout(resolve, ms));
                     continue;
                 }
@@ -122,11 +136,36 @@ export class AiAgentService implements OnModuleInit {
         return { ok: false, error: f };
     }
 
-    private truncateUtf8(text: string, maxChars: number): string {
-        if (text.length <= maxChars) {
-            return text;
+    /**
+     * Extracts the most security-relevant portions of an email body to minimize
+     * token usage while retaining maximum signal for threat detection.
+     *
+     * Strategy:
+     *   - Opening (first 2,500 chars): Contains sender intent, social engineering cues,
+     *     urgency language, and impersonation attempts.
+     *   - Closing (last 500 chars): Contains call-to-action, suspicious links,
+     *     and credential-harvesting instructions.
+     *   - Middle content is omitted (typically boilerplate, HTML padding, legal text).
+     *
+     * Token budget: ~800 tokens vs. up to 30,000 for full bodies (120k chars).
+     */
+    private extractSecurityRelevantBody(text: string): string {
+        const HEAD_CHARS = 2_500;
+        const TAIL_CHARS = 500;
+        const SEPARATOR = '\n[...middle content omitted for quota efficiency...]\n';
+
+        if (text.length <= HEAD_CHARS + TAIL_CHARS) {
+            return text; // Short email — send in full
         }
-        this.logger.warn(`AI request body truncated from ${text.length} to ${maxChars} chars`);
-        return text.slice(0, maxChars);
+
+        const head = text.slice(0, HEAD_CHARS);
+        const tail = text.slice(-TAIL_CHARS);
+
+        this.logger.debug(
+            `Body extraction: ${text.length} chars → ${HEAD_CHARS + TAIL_CHARS} chars ` +
+            `(~${Math.round((HEAD_CHARS + TAIL_CHARS) / 4)} tokens saved: ~${Math.round((text.length - HEAD_CHARS - TAIL_CHARS) / 4)})`,
+        );
+
+        return `${head}${SEPARATOR}${tail}`;
     }
 }

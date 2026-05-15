@@ -72,6 +72,8 @@ export class EmailSendProcessor extends WorkerHost {
         attachments: attachments.length ? attachments : undefined,
       };
 
+      let providerMessageId: string | undefined;
+
       if (mailbox.provider === EmailProviders.GMAIL && mailbox.oauthToken) {
         const tokens = await this.mailboxesService.getGmailTokens(mailbox.id);
         if (!tokens) throw new Error('Gmail tokens not available');
@@ -81,7 +83,7 @@ export class EmailSendProcessor extends WorkerHost {
           refresh_token: tokens.refreshToken,
         });
         const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-        await this.gmailSendProvider.send(gmail, sendOptions);
+        providerMessageId = await this.gmailSendProvider.send(gmail, sendOptions);
       } else if (
         mailbox.provider === EmailProviders.OUTLOOK &&
         mailbox.oauthToken
@@ -94,6 +96,7 @@ export class EmailSendProcessor extends WorkerHost {
             done(null, tokens.accessToken ?? null),
         });
         await this.outlookSendProvider.send(client, sendOptions);
+        // Note: Outlook Graph API /sendMail doesn't return the ID in response.
       } else if (
         mailbox.provider === EmailProviders.CUSTOM &&
         mailbox.imapConfig &&
@@ -108,14 +111,14 @@ export class EmailSendProcessor extends WorkerHost {
             pass: this.encryption.decrypt(mailbox.smtpConfig.passwordEncrypted),
           },
         };
-        await this.smtpSendProvider.send(smtpConfig, sendOptions);
+        providerMessageId = await this.smtpSendProvider.send(smtpConfig, sendOptions);
       } else {
         throw new Error(
           'Mailbox does not have sending configured. For IMAP/Custom, SMTP must be set up.',
         );
       }
 
-      await this.saveSentEmail(mailbox.id, data, from);
+      await this.saveSentEmail(mailbox.id, data, from, providerMessageId);
     } finally {
       // Cleanup is now handled by a separate retention policy/job 
       // to ensure history remains available in the "Sent" folder.
@@ -126,6 +129,7 @@ export class EmailSendProcessor extends WorkerHost {
     mailboxId: number,
     data: SendJobData,
     from: string,
+    providerMessageId?: string,
   ): Promise<void> {
     let sentFolder = await this.prisma.folder.findFirst({
       where: { mailBoxId: mailboxId, type: FolderType.SENT },
@@ -141,7 +145,7 @@ export class EmailSendProcessor extends WorkerHost {
       });
     }
 
-    const messageId = `<sent-${mailboxId}-${Date.now()}@securemail.local>`;
+    const messageId = providerMessageId || `<sent-${mailboxId}-${Date.now()}@securemail.local>`;
     await this.prisma.email.create({
       data: {
         mailBoxId: mailboxId,

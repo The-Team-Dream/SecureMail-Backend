@@ -12,20 +12,32 @@ import { PrismaModule } from '../../prisma.module';
 import { AuthModule } from '../../auth/auth.module';
 import { MailboxesModule } from '../mailboxes.module';
 import { forwardRef } from '@nestjs/common';
+import { SecurityModule } from '../../security/security.module';
 
 @Module({
   imports: [
     PrismaModule,
     AuthModule,
     forwardRef(() => MailboxesModule),
-    BullModule.registerQueue({
-      name: EMAIL_SEND_QUEUE,
-      defaultJobOptions: {
-        removeOnComplete: 100,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
+    BullModule.registerQueue(
+      {
+        name: EMAIL_SEND_QUEUE,
+        defaultJobOptions: {
+          removeOnComplete: 100,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+        },
       },
-    }),
+      {
+        name: 'email-process', // QUEUE_EMAIL_PROCESS from constants
+        defaultJobOptions: {
+          removeOnComplete: 1000,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+        },
+      }
+    ),
+    SecurityModule,
   ],
   controllers: [EmailsController],
   providers: [

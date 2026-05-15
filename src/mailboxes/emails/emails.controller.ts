@@ -252,6 +252,27 @@ export class EmailsController {
     );
   }
 
+  @Get('reports')
+  @ApiOperation({
+    summary:     'List security reports/incidents',
+    description: 'Returns a paginated list of security incidents detected in the mailbox (Phishing, Malware, Spam).',
+  })
+  @ApiQuery({ name: 'page',  required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiResponse({ status: 200, description: 'Security reports returned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Mailbox not found or does not belong to this user' })
+  getReports(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Query() query: PaginatedQueryDto,
+  ) {
+    return this.emailsService.listReports(
+      req.user.id, mailboxId,
+      query.page ?? 1, query.limit ?? 20,
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // READ — Single email
   // ═══════════════════════════════════════════════════════════════════════════
@@ -395,6 +416,53 @@ export class EmailsController {
     @Body() dto: ReclassifyEmailDto,
   ) {
     return this.emailsService.reclassify(req.user.id, mailboxId, id, dto.folder);
+  }
+
+  @Post('emails/:id/scan')
+  @ApiOperation({
+    summary:     'Scan email for security threats',
+    description: 'Manually triggers a security scan for the specified email. This re-runs the full security pipeline.',
+  })
+  @ApiParam({ name: 'id', description: 'Email ID', example: 42, type: Number })
+  @ApiResponse({ status: 200, description: 'Email scanned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Email not found in this mailbox' })
+  scanEmail(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.emailsService.scanEmail(req.user.id, mailboxId, id);
+  }
+
+  @Post('scan-all')
+  @ApiOperation({
+    summary:     'Scan all emails in mailbox',
+    description: 'Manually triggers a security scan for all emails currently in the mailbox. This re-runs the security pipeline for every email.',
+  })
+  @ApiResponse({ status: 200, description: 'All emails scanned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Mailbox not found' })
+  scanAllEmails(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+  ) {
+    return this.emailsService.scanAllEmails(req.user.id, mailboxId);
+  }
+
+  @Get('scan-progress')
+  @ApiOperation({
+    summary:     'Get bulk scan progress',
+    description: 'Returns the progress of the asynchronous bulk scanning operation.',
+  })
+  @ApiResponse({ status: 200, description: 'Progress returned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Mailbox not found' })
+  getScanProgress(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+  ) {
+    return this.emailsService.getScanProgress(req.user.id, mailboxId);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

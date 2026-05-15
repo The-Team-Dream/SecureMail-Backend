@@ -54,6 +54,27 @@ export class SessionsService {
 
   async createSession(input: CreateSessionInput): Promise<number> {
     const { os, browser } = this.parseDeviceInfo(input.userAgent);
+
+    // ── Session Deduplication ────────────────────────────
+    // Check if there is an active session with the same user, IP, and UserAgent
+    const existingSession = await this.prisma.userSession.findFirst({
+      where: {
+        userId: input.userId,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (existingSession) {
+      // Update expiry and return existing ID
+      await this.prisma.userSession.update({
+        where: { id: existingSession.id },
+        data: { expiresAt: input.expiresAt },
+      });
+      return existingSession.id;
+    }
+
     const session = await this.prisma.userSession.create({
       data: {
         userId: input.userId,

@@ -78,6 +78,7 @@ export class NotificationsService {
         take: limit,
         select: {
           id: true,
+          userId: true,
           type: true,
           title: true,
           message: true,

@@ -35,17 +35,33 @@ export class MailboxesService {
         oauthToken: true,
         imapConfig: true,
         _count: { select: { emails: true } },
+        emails: {
+          select: {
+            attachments: {
+              select: { size: true }
+            }
+          }
+        }
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
     });
+
     return mailboxes.map((mb) => {
-      const { imapConfig, oauthToken, ...rest } = mb as typeof mb & {
-        imapConfig?: unknown;
-        oauthToken?: unknown;
-      };
+      const { imapConfig, oauthToken, emails, ...rest } = mb as any;
+      
+      // Calculate storage used from emails' attachments
+      let storageUsed = 0;
+      for (const email of emails) {
+        for (const att of email.attachments) {
+          storageUsed += att.size;
+        }
+      }
+
       return {
         ...rest,
         hasCredentials: !!(imapConfig || oauthToken),
+        storageUsed,
+        storageLimit: 20 * 1024 * 1024 * 1024, // 20 GB default
       };
     });
   }
@@ -286,6 +302,22 @@ export class MailboxesService {
     if (!mailBox) {
       throw new NotFoundException('Mailbox not found');
     }
+
+    // ── Calculate Storage Usage ──────────────────────────
+    const storageStats = await this.prisma.attachment.aggregate({
+      where: {
+        email: {
+          mailBoxId: id,
+        },
+      },
+      _sum: {
+        size: true,
+      },
+    });
+
+    const storageUsed = storageStats._sum.size || 0;
+    const storageLimit = 20 * 1024 * 1024 * 1024; // 20 GB default limit
+
     const { imapConfig, oauthToken, ...rest } = mailBox as typeof mailBox & {
       imapConfig?: { passwordEncrypted?: string };
       oauthToken?: unknown;
@@ -293,6 +325,8 @@ export class MailboxesService {
     return {
       ...rest,
       hasCredentials: !!(imapConfig?.passwordEncrypted ?? oauthToken),
+      storageUsed,
+      storageLimit,
     };
   }
 

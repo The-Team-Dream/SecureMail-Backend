@@ -77,7 +77,8 @@ export class EmailProcessProcessor extends WorkerHost {
             try {
               const body = await this.gmailProvider.getAttachment(gmail, 'me', email.messageId, part.attachmentId);
               if (body.data) {
-                const buffer = Buffer.from(body.data, 'base64');
+                const base64Data = body.data.replace(/-/g, '+').replace(/_/g, '/');
+                const buffer = Buffer.from(base64Data, 'base64');
                 const file = {
                   buffer,
                   originalname: part.filename,

@@ -280,17 +280,27 @@ export class EmailSyncProcessor extends WorkerHost {
     const from = getHeader('From');
     let bodyText = '', bodyHtml = '';
 
+    const extractBodies = (parts: any[]) => {
+      for (const part of parts) {
+        if (part.body?.data && (!part.filename || part.filename.trim() === '')) {
+          const base64Data = part.body.data.replace(/-/g, '+').replace(/_/g, '/');
+          const decoded = Buffer.from(base64Data, 'base64').toString('utf8');
+          if (part.mimeType === 'text/html') bodyHtml = decoded;
+          else if (part.mimeType === 'text/plain') bodyText = decoded;
+        }
+        if (part.parts) {
+          extractBodies(part.parts);
+        }
+      }
+    };
+
     if (msg.payload?.body?.data) {
-      const decoded = Buffer.from(msg.payload.body.data, 'base64').toString('utf8');
+      const base64Data = msg.payload.body.data.replace(/-/g, '+').replace(/_/g, '/');
+      const decoded = Buffer.from(base64Data, 'base64').toString('utf8');
       if ((msg.payload as { mimeType?: string }).mimeType === 'text/html') bodyHtml = decoded;
       else bodyText = decoded;
-    }
-    for (const part of msg.payload?.parts ?? []) {
-      if (part.body?.data) {
-        const decoded = Buffer.from(part.body.data, 'base64').toString('utf8');
-        if (part.mimeType === 'text/html') bodyHtml = decoded;
-        else bodyText = decoded;
-      }
+    } else {
+      extractBodies(msg.payload?.parts ?? []);
     }
 
     const gmailAttachmentParts: Array<{ filename: string; mimeType: string; attachmentId: string }> = [];

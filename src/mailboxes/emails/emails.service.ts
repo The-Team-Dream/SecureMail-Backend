@@ -11,6 +11,10 @@ import { TargetFolderType } from './dto/reclassify-email.dto';
 
 import { MailboxesService } from '../mailboxes.service';
 import { forwardRef, Inject } from '@nestjs/common';
+import { SecurityService } from '../../security/security.service';
+import { SecurityPipelineInput } from '../../security/security.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class EmailsService {
@@ -18,6 +22,8 @@ export class EmailsService {
     private prisma: PrismaService,
     @Inject(forwardRef(() => MailboxesService))
     private mailboxesService: MailboxesService,
+    private securityService: SecurityService,
+    @InjectQueue('email-process') private readonly processQueue: Queue,
   ) {}
 
   async ensureMailboxAccess(userId: number, mailboxId: number) {
@@ -30,20 +36,7 @@ export class EmailsService {
     return mailbox;
   }
 
-  private async getFolderByType(
-    mailboxId: number,
-    folderType: FolderType,
-  ) {
-    const folder = await this.prisma.folder.findFirst({
-      where: { mailBoxId: mailboxId, type: folderType },
-    });
-    if (!folder) {
-      throw new NotFoundException(
-        `Folder ${folderType.toLowerCase()} not found for this mailbox`,
-      );
-    }
-    return folder;
-  }
+
 
   async listByFolder(
     userId: number,
@@ -53,7 +46,7 @@ export class EmailsService {
     limit: number,
   ) {
     await this.ensureMailboxAccess(userId, mailboxId);
-    const folder = await this.getFolderByType(mailboxId, folderType);
+    const folder = await this.getOrCreateFolder(mailboxId, folderType);
 
     const skip = (page - 1) * limit;
     const [emails, total] = await Promise.all([
@@ -79,6 +72,13 @@ export class EmailsService {
           malwareVerdict: true,
           malwareScore: true,
           malwareSeverity: true,
+          attachments: {
+            select: {
+              id: true,
+              filename: true,
+              size: true,
+            },
+          },
         },
       }),
       this.prisma.email.count({
@@ -129,6 +129,13 @@ export class EmailsService {
           malwareVerdict: true,
           malwareScore: true,
           malwareSeverity: true,
+          attachments: {
+            select: {
+              id: true,
+              filename: true,
+              size: true,
+            },
+          },
           folder: { select: { id: true, type: true } },
         },
       }),
@@ -194,6 +201,13 @@ export class EmailsService {
           malwareVerdict: true,
           malwareScore: true,
           malwareSeverity: true,
+          attachments: {
+            select: {
+              id: true,
+              filename: true,
+              size: true,
+            },
+          },
           folder: { select: { id: true, type: true } },
         },
       }),
@@ -225,9 +239,62 @@ export class EmailsService {
     if (!email) {
       throw new NotFoundException('Email not found');
     }
+
+    const securityReport = this.mapAiReportToSecurityModel(email);
+
     return {
       ...email,
       aiReportStatus: email.aiReport ? 'COMPLETED' : 'PENDING',
+      securityReport,
+    };
+  }
+
+  private mapAiReportToSecurityModel(email: any) {
+    if (!email.aiReport) return null;
+
+    const report = email.aiReport as any;
+
+    // Derive status from BACKEND classification (the source of truth),
+    // not from the AI's verdict (which uses a different scale: SAFE/SUSPICIOUS/DANGEROUS).
+    // This ensures the banner accurately reflects where the rule engine placed the email.
+    let status: string;
+    if (email.malwareVerdict && email.malwareVerdict !== 'clean') {
+      status = 'MALICIOUS';
+    } else if (email.isPhishing) {
+      status = 'PHISHING';
+    } else if (email.isSpam) {
+      status = 'SPAM';
+    } else {
+      // Not classified as a threat by the backend — use AI verdict for SUSPICIOUS/SAFE distinction
+      // Map AI scale (SAFE/SUSPICIOUS/DANGEROUS) to backend scale
+      const aiVerdict = (report.verdict || 'SAFE') as string;
+      if (aiVerdict === 'DANGEROUS') status = 'SUSPICIOUS'; // Downgraded: backend didn't confirm threat
+      else if (aiVerdict === 'SUSPICIOUS') status = 'SUSPICIOUS';
+      else status = 'SAFE';
+    }
+
+    return {
+      status,
+      confidenceScore: report.confidence || 0,
+      detectionMessage: report.summary || 'Security analysis complete.',
+      severity: report.severity || 'LOW',
+      priority: report.priority || 'NORMAL',
+      reason: report.explanation || 'No specific threat detected.',
+      description: report.explanation || '',
+      recommendationTitle: 'Security Recommendation',
+      recommendationText: report.recommendation || 'No specific actions required.',
+      suggestedActions: report.replySuggestions || [],
+      anomalies: report.behavioralAnomaly
+        ? [
+            {
+              type: 'BEHAVIORAL',
+              title: 'Anomaly Detected',
+              description: report.anomalyDescription || 'Suspicious behavior pattern found.',
+            },
+          ]
+        : [],
+      emailId: email.id.toString(),
+      analysisEngine: 'SecureMail AI-Guard',
     };
   }
 
@@ -460,5 +527,214 @@ export class EmailsService {
     // Since we've migrated to Cloudinary, local file streaming is deprecated.
     // If we reach here, it means storagePath was not a URL, which shouldn't happen for new records.
     throw new NotFoundException('Attachment source not available (deprecated local storage)');
+  }
+  async listReports(
+    userId: number,
+    mailboxId: number,
+    page: number,
+    limit: number,
+  ) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+
+    const skip = (page - 1) * limit;
+
+    // Define what constitutes a security incident for the report list
+    const whereClause = {
+      mailBoxId: mailboxId,
+      OR: [
+        { isSpam: true },
+        { isPhishing: true },
+        { NOT: { malwareVerdict: null } },
+        { analysisStatus: 'PENDING' as const },
+      ],
+    };
+
+    const [emails, total, criticalCount, pendingCount, resolvedCount] = await Promise.all([
+      this.prisma.email.findMany({
+        where: whereClause,
+        orderBy: { receivedAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          subject: true,
+          fromAddr: true,
+          fromName: true,
+          isRead: true,
+          receivedAt: true,
+          isSpam: true,
+          isPhishing: true,
+          phishingScore: true,
+          malwareVerdict: true,
+          malwareSeverity: true,
+          analysisStatus: true,
+        },
+      }),
+      this.prisma.email.count({ where: whereClause }),
+      // Stats
+      this.prisma.email.count({
+        where: {
+          mailBoxId: mailboxId,
+          OR: [
+            { NOT: { malwareVerdict: null } },
+            { isPhishing: true, phishingScore: { gt: 80 } },
+          ],
+        },
+      }),
+      this.prisma.email.count({
+        where: { mailBoxId: mailboxId, analysisStatus: 'PENDING' },
+      }),
+      this.prisma.email.count({
+        where: {
+          mailBoxId: mailboxId,
+          analysisStatus: 'COMPLETED',
+          isSpam: false,
+          isPhishing: false,
+          malwareVerdict: null,
+        },
+      }),
+    ]);
+
+    // Map to Incident Model expected by Flutter
+    const data = emails.map((email) => {
+      let type = 'suspiciousActivity';
+      let title = email.subject || 'No Subject';
+      const description = `From: ${email.fromAddr}`;
+
+      if (email.malwareVerdict || (email.isPhishing && email.phishingScore > 80)) {
+        type = 'criticalThreat';
+      } else if (email.analysisStatus === 'PENDING') {
+        type = 'systemUpdate'; // Using this as placeholder for "Analysis in progress" in UI
+      }
+
+      return {
+        id: email.id.toString(),
+        type,
+        title,
+        description,
+        timeAgo: email.receivedAt.toISOString(), // Frontend will format this
+        isRead: email.isRead,
+      };
+    });
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        stats: {
+          critical: criticalCount,
+          pending: pendingCount,
+          resolved: resolvedCount,
+        },
+      },
+    };
+  }
+
+  async scanEmail(userId: number, mailboxId: number, emailId: number) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+    const email = await this.prisma.email.findFirst({
+      where: { id: emailId, mailBoxId: mailboxId },
+      include: { attachments: true },
+    });
+    if (!email) {
+      throw new NotFoundException('Email not found');
+    }
+
+    const input: SecurityPipelineInput = {
+      emailId: email.id.toString(),
+      mailBoxId: mailboxId,
+      messageId: email.messageId || '',
+      subject: email.subject || '',
+      fromAddr: email.fromAddr,
+      fromName: email.fromName || '',
+      toAddr: email.toAddr as string | string[],
+      ccAddr: email.ccAddr as string | string[] | null,
+
+      bccAddr: email.bccAddr as string | string[] | null,
+      receivedAt: email.receivedAt,
+      bodyText: email.bodyText || '',
+      bodyHtml: email.bodyHtml || '',
+      attachments: email.attachments.map((att) => ({
+        filename: att.filename || 'unnamed',
+        mimeType: att.mimeType,
+        size: att.size,
+        storagePath: att.storagePath,
+      })),
+    };
+
+    const result = await this.securityService.analyze(input, userId);
+    return {
+      message: 'Scan complete',
+      emailId,
+      verdict: result.verdict,
+      riskAssessment: result.riskAssessment,
+    };
+  }
+
+  async scanAllEmails(userId: number, mailboxId: number) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+
+    // Get ALL emails so we can force a re-scan with the AI model.
+    const emails = await this.prisma.email.findMany({
+      where: { mailBoxId: mailboxId },
+      select: { id: true, messageId: true },
+    });
+
+    if (emails.length === 0) {
+      return { message: 'Mailbox is empty', results: [] };
+    }
+
+    // Set all to PENDING first so the progress bar is accurate immediately
+    await this.prisma.email.updateMany({
+      where: {
+        id: { in: emails.map(e => e.id) },
+      },
+      data: { analysisStatus: 'PENDING' },
+    });
+
+    // Enqueue background jobs for each email
+    const jobs = emails.map(email => ({
+      name: 'process-email',
+      data: {
+        emailId: email.id,
+        mailBoxId: mailboxId,
+        userId: userId,
+        messageId: email.messageId,
+      },
+      opts: { removeOnComplete: 1000, removeOnFail: 5000 },
+    }));
+
+    await this.processQueue.addBulk(jobs);
+
+    return {
+      message: `Background scanning started for ${emails.length} emails.`,
+      totalEnqueued: emails.length,
+    };
+  }
+
+  async getScanProgress(userId: number, mailboxId: number) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+
+    const total = await this.prisma.email.count({
+      where: { mailBoxId: mailboxId },
+    });
+
+    const pending = await this.prisma.email.count({
+      where: { mailBoxId: mailboxId, analysisStatus: 'PENDING' },
+    });
+
+    const completed = total - pending;
+    const percentage = total === 0 ? 100 : Math.round((completed / total) * 100);
+
+    return {
+      total,
+      completed,
+      pending,
+      percentage,
+      isScanning: pending > 0,
+    };
   }
 }
