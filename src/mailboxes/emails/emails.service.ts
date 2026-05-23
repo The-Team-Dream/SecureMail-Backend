@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   StreamableFile,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { FolderType } from '@prisma/client';
@@ -18,6 +19,8 @@ import { Queue } from 'bullmq';
 
 @Injectable()
 export class EmailsService {
+  private readonly logger = new Logger(EmailsService.name);
+
   constructor(
     private prisma: PrismaService,
     @Inject(forwardRef(() => MailboxesService))
@@ -242,10 +245,30 @@ export class EmailsService {
 
     const securityReport = this.mapAiReportToSecurityModel(email);
 
+    // If the email is stuck in PENDING for more than 4 minutes, return it as FAILED
+    // so the UI stops showing "Scanning..." indefinitely and enables the Scan button.
+    let analysisStatus = email.analysisStatus;
+    const STUCK_THRESHOLD_MS = 4 * 60 * 1000; // 4 minutes
+    if (
+      analysisStatus === 'PENDING' &&
+      Date.now() - new Date(email.createdAt).getTime() > STUCK_THRESHOLD_MS
+    ) {
+      analysisStatus = 'FAILED';
+    }
+
+    // Dynamically check BullMQ processQueue to see if this email is currently undergoing a live rescan
+    const activeJobs = await this.processQueue.getActive();
+    const waitingJobs = await this.processQueue.getJobs(['wait', 'paused']);
+    const isRescanning = [...activeJobs, ...waitingJobs].some(
+      (j) => j.data?.emailId === email.id
+    );
+
     return {
       ...email,
+      analysisStatus,
       aiReportStatus: email.aiReport ? 'COMPLETED' : 'PENDING',
       securityReport,
+      isRescanning,
     };
   }
 
@@ -643,34 +666,41 @@ export class EmailsService {
       throw new NotFoundException('Email not found');
     }
 
-    const input: SecurityPipelineInput = {
-      emailId: email.id.toString(),
+    const STUCK_THRESHOLD_MS = 4 * 60 * 1000; // 4 minutes
+    const isStuck =
+      email.analysisStatus === 'PENDING' &&
+      Date.now() - new Date(email.createdAt).getTime() > STUCK_THRESHOLD_MS;
+
+    if (email.analysisStatus === 'PENDING' && !isStuck) {
+      return {
+        message: 'Scan already in progress',
+        emailId,
+      };
+    }
+
+    // If the email already has a completed AI report, keep analysisStatus as COMPLETED
+    // so the existing report remains visible during the rescan. Otherwise, set to PENDING.
+    const newStatus = email.aiReport ? 'COMPLETED' : 'PENDING';
+
+    await this.prisma.email.update({
+      where: { id: email.id },
+      data: {
+        analysisStatus: newStatus,
+        createdAt: new Date(),
+      },
+    });
+
+    // Enqueue background job to prevent overloading the AI model
+    await this.processQueue.add('process-email', {
+      emailId: email.id,
       mailBoxId: mailboxId,
+      userId: userId,
       messageId: email.messageId || '',
-      subject: email.subject || '',
-      fromAddr: email.fromAddr,
-      fromName: email.fromName || '',
-      toAddr: email.toAddr as string | string[],
-      ccAddr: email.ccAddr as string | string[] | null,
+    }, { jobId: `process-${email.id}`, removeOnComplete: 1000, removeOnFail: 5000 });
 
-      bccAddr: email.bccAddr as string | string[] | null,
-      receivedAt: email.receivedAt,
-      bodyText: email.bodyText || '',
-      bodyHtml: email.bodyHtml || '',
-      attachments: email.attachments.map((att) => ({
-        filename: att.filename || 'unnamed',
-        mimeType: att.mimeType,
-        size: att.size,
-        storagePath: att.storagePath,
-      })),
-    };
-
-    const result = await this.securityService.analyze(input, userId);
     return {
-      message: 'Scan complete',
+      message: 'Scan enqueued',
       emailId,
-      verdict: result.verdict,
-      riskAssessment: result.riskAssessment,
     };
   }
 
@@ -680,20 +710,21 @@ export class EmailsService {
     // Get ALL emails so we can force a re-scan with the AI model.
     const emails = await this.prisma.email.findMany({
       where: { mailBoxId: mailboxId },
-      select: { id: true, messageId: true },
+      select: { id: true, messageId: true, aiReport: true },
     });
 
     if (emails.length === 0) {
       return { message: 'Mailbox is empty', results: [] };
     }
 
-    // Set all to PENDING first so the progress bar is accurate immediately
-    await this.prisma.email.updateMany({
-      where: {
-        id: { in: emails.map(e => e.id) },
-      },
-      data: { analysisStatus: 'PENDING' },
-    });
+    // Set emails WITHOUT aiReport to PENDING. Emails WITH aiReport keep their COMPLETED status.
+    const emailsWithoutReport = emails.filter(e => !e.aiReport);
+    if (emailsWithoutReport.length > 0) {
+      await this.prisma.email.updateMany({
+        where: { id: { in: emailsWithoutReport.map(e => e.id) } },
+        data: { analysisStatus: 'PENDING' },
+      });
+    }
 
     // Enqueue background jobs for each email
     const jobs = emails.map(email => ({
@@ -704,7 +735,7 @@ export class EmailsService {
         userId: userId,
         messageId: email.messageId,
       },
-      opts: { removeOnComplete: 1000, removeOnFail: 5000 },
+      opts: { jobId: `process-${email.id}`, removeOnComplete: 1000, removeOnFail: 5000 },
     }));
 
     await this.processQueue.addBulk(jobs);
@@ -736,5 +767,101 @@ export class EmailsService {
       percentage,
       isScanning: pending > 0,
     };
+  }
+
+  async getQueueStatus(userId: number, mailboxId: number) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+
+    // Fetch active, waiting, and paused jobs from BullMQ processQueue
+    const activeJobs = await this.processQueue.getActive();
+    const waitingJobs = await this.processQueue.getJobs(['wait', 'paused']);
+
+    const isPaused = await this.processQueue.isPaused();
+
+    // Map jobs to friendly details, filtering by current mailboxId to only show relevant ones
+    const active = activeJobs
+      .filter((j) => j.data?.mailBoxId === mailboxId)
+      .map((j) => ({
+        jobId: j.id,
+        emailId: j.data?.emailId,
+        messageId: j.data?.messageId,
+        addedAt: j.timestamp ? new Date(j.timestamp) : new Date(),
+        progress: j.progress,
+      }));
+
+    const waiting = waitingJobs
+      .filter((j) => j.data?.mailBoxId === mailboxId)
+      .map((j) => ({
+        jobId: j.id,
+        emailId: j.data?.emailId,
+        messageId: j.data?.messageId,
+        addedAt: j.timestamp ? new Date(j.timestamp) : new Date(),
+      }));
+
+    return {
+      active,
+      waiting,
+      activeCount: active.length,
+      waitingCount: waiting.length,
+      isPaused,
+    };
+  }
+
+  async controlQueue(userId: number, mailboxId: number, action: 'pause' | 'resume' | 'clear') {
+    await this.ensureMailboxAccess(userId, mailboxId);
+
+    if (action === 'pause') {
+      // Queue.pause() in BullMQ only writes a flag to Redis (fast). It does NOT block waiting for active jobs.
+      // We must await it so the paused state is committed before we return the response,
+      // otherwise the frontend refetches and sees isPaused=false, hides the Resume button forever.
+      await this.processQueue.pause();
+      return { message: 'Queue paused successfully' };
+    } else if (action === 'resume') {
+      await this.processQueue.resume();
+      return { message: 'Queue resumed successfully' };
+    } else if (action === 'clear') {
+      // Clear waiting, paused, and delayed jobs (up to 10,000 jobs to avoid blocking Redis)
+      await this.processQueue.clean(0, 10000, 'wait');
+      await this.processQueue.clean(0, 10000, 'paused');
+      await this.processQueue.clean(0, 10000, 'delayed');
+      
+      // Update database status of waiting/pending emails for this mailbox back to 'FAILED' so they don't get stuck!
+      await this.prisma.email.updateMany({
+        where: { mailBoxId: mailboxId, analysisStatus: 'PENDING' },
+        data: { analysisStatus: 'FAILED' },
+      });
+
+      return { message: 'Queue cleared successfully' };
+    }
+
+    throw new BadRequestException('Invalid queue control action');
+  }
+
+  async cancelScanJob(userId: number, mailboxId: number, emailId: number) {
+    await this.ensureMailboxAccess(userId, mailboxId);
+
+    const job = await this.processQueue.getJob(`process-${emailId}`);
+    if (job) {
+      try {
+        // Remove job from Redis
+        await job.remove();
+      } catch (err) {
+        // If removing fails (e.g., job is active and locked), try to discard it first
+        try {
+          await job.discard();
+          await job.remove();
+        } catch (innerErr) {
+          this.logger.warn(`Could not forcefully remove active scan job process-${emailId}: ${innerErr.message}`);
+        }
+      }
+    }
+
+    // Reset status in database
+    await this.prisma.email.update({
+      where: { id: emailId },
+      data: { analysisStatus: 'FAILED' },
+    });
+
+    return { message: 'Scan cancelled successfully', emailId };
   }
 }

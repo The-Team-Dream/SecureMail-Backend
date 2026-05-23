@@ -465,6 +465,63 @@ export class EmailsController {
     return this.emailsService.getScanProgress(req.user.id, mailboxId);
   }
 
+  @Get('scan-queue')
+  @ApiOperation({
+    summary:     'Get scan queue status',
+    description: 'Returns active and waiting jobs in the local security scanning queue.',
+  })
+  @ApiResponse({ status: 200, description: 'Queue status returned successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  getQueueStatus(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+  ) {
+    return this.emailsService.getQueueStatus(req.user.id, mailboxId);
+  }
+
+  @Post('scan-queue/control')
+  @ApiOperation({
+    summary:     'Control scan queue',
+    description: 'Allows pausing, resuming, or clearing the security scanning queue.',
+  })
+  @ApiBody({
+    schema: {
+      type:       'object',
+      required:   ['action'],
+      properties: {
+        action: { type: 'string', enum: ['pause', 'resume', 'clear'], example: 'pause' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Queue action executed successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  controlQueue(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Body('action') action: 'pause' | 'resume' | 'clear',
+  ) {
+    if (!['pause', 'resume', 'clear'].includes(action)) {
+      throw new BadRequestException('Invalid queue control action. Allowed actions: pause, resume, clear');
+    }
+    return this.emailsService.controlQueue(req.user.id, mailboxId, action);
+  }
+
+  @Delete('scan-queue/:emailId')
+  @ApiOperation({
+    summary:     'Cancel an active or waiting email scan',
+    description: 'Cancels the scan job for a specific email, removing it from the queue and resetting its status in the database.',
+  })
+  @ApiParam({ name: 'emailId', description: 'ID of the email to cancel scanning', type: Number })
+  @ApiResponse({ status: 200, description: 'Scan job cancelled successfully' })
+  @ApiUnauthorizedResponse({ description: AUTH_ERRORS[401], type: ApiErrorResponseDto })
+  cancelScanJob(
+    @Req() req: { user: { id: number } },
+    @Param('mailboxId', ParseIntPipe) mailboxId: number,
+    @Param('emailId', ParseIntPipe) emailId: number,
+  ) {
+    return this.emailsService.cancelScanJob(req.user.id, mailboxId, emailId);
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // SEND — Compose, Reply, Forward
   // ═══════════════════════════════════════════════════════════════════════════

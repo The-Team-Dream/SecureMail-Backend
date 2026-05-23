@@ -88,6 +88,11 @@ export class SecurityService {
         stack: err instanceof Error ? err.stack : undefined,
       });
 
+      // Strict requirement: If AI fails, bubble the error up so BullMQ can retry
+      if (err instanceof Error && err.message.includes('MANDATORY_AI_ANALYSIS_FAILED')) {
+        throw err;
+      }
+
       // Fallback: return safe defaults so email processing continues
       return this.buildFallbackResult(input, startMs);
     }
@@ -390,14 +395,9 @@ export class SecurityService {
       ctx.setAiIntegration({ state: 'ok', atMs });
       return analysisReportToAiSignals(outcome.report);
     }
-    ctx.setAiIntegration({
-      state: 'failed',
-      atMs,
-      grpcCode: outcome.error.grpcCode,
-      message: outcome.error.message,
-      kind: outcome.error.kind,
-    });
-    return {};
+    
+    // Strict requirement: Do not return gracefully on AI failure
+    throw new Error(`MANDATORY_AI_ANALYSIS_FAILED: ${outcome.error.message}`);
   }
 
   private async persistResults(

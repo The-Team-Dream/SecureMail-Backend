@@ -22,7 +22,7 @@ export interface ProcessEmailJobData {
   existingAttachmentIds?: number[];
 }
 
-@Processor(QUEUE_EMAIL_PROCESS, { concurrency: 5 })
+@Processor(QUEUE_EMAIL_PROCESS, { concurrency: 3 })
 @Injectable()
 export class EmailProcessProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailProcessProcessor.name);
@@ -209,10 +209,21 @@ export class EmailProcessProcessor extends WorkerHost {
 
     } catch (err) {
       this.logger.error(`[PROCESS FAILED] Email ${data.emailId}`, err);
-      await this.prisma.email.update({
+
+      // Check if the email already has a previous completed report (aiReport)
+      const existingEmail = await this.prisma.email.findUnique({
         where: { id: data.emailId },
-        data: { analysisStatus: AnalysisStatus.FAILED },
+        select: { aiReport: true },
       });
+
+      // If no previous report exists, mark as FAILED. If a report exists, keep COMPLETED.
+      if (!existingEmail?.aiReport) {
+        await this.prisma.email.update({
+          where: { id: data.emailId },
+          data: { analysisStatus: AnalysisStatus.FAILED },
+        });
+      }
+
       throw err; // Trigger retry
     }
   }

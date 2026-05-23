@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices';
-import { Observable, timeout } from 'rxjs';
+import { Observable, timeout, TimeoutError } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { status } from '@grpc/grpc-js';
 
@@ -92,16 +92,23 @@ export class AiAgentService implements OnModuleInit {
 
         const deadlineMs = Math.max(
             1000,
-            Number(process.env.AI_AGENT_GRPC_MS ?? 60_000) || 60_000,
+            Number(process.env.AI_AGENT_GRPC_MS ?? 300_000) || 300_000,
         );
         const maxRetries = Math.min(
             4,
             Math.max(0, Number(process.env.AI_AGENT_GRPC_RETRIES ?? 2) || 2),
         );
 
+        this.logger.log(
+            `Calling AI Agent gRPC for email_id=${request.email_id}. Timeout limit: ${deadlineMs}ms, Max retries: ${maxRetries}`,
+        );
+
         let lastErr: unknown;
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
+                if (attempt > 0) {
+                    this.logger.log(`AI Agent gRPC attempt #${attempt + 1}/${maxRetries + 1} for email_id=${request.email_id}...`);
+                }
                 const report = await firstValueFrom(
                     this.aiAgentClient.GenerateReport(request).pipe(timeout({ first: deadlineMs })),
                 );
@@ -109,22 +116,28 @@ export class AiAgentService implements OnModuleInit {
                 return { ok: true, report };
             } catch (err) {
                 lastErr = err;
+                const isTimeout =
+                    err instanceof TimeoutError ||
+                    (err instanceof Error &&
+                        (err.name === 'TimeoutError' || err.message === 'Timeout has occurred'));
+
                 const code = (err as { code?: number })?.code;
-                if (attempt < maxRetries && code !== undefined && RETRYABLE.has(code)) {
-                    // RESOURCE_EXHAUSTED (quota/rate-limit) needs a much longer wait.
-                    // Groq resets TPM every ~2s and RPM every ~60s.
-                    // We use a longer exponential backoff capped at 15s for quota errors.
+                const isRetryable = isTimeout || (code !== undefined && RETRYABLE.has(code));
+
+                if (attempt < maxRetries && isRetryable) {
                     const isQuota = code === status.RESOURCE_EXHAUSTED;
-                    const baseMs  = isQuota ? 3_000 : 150;
-                    const capMs   = isQuota ? 15_000 : 2_000;
+                    const baseMs = isQuota ? 3_000 : (isTimeout ? 1_500 : 150);
+                    const capMs = isQuota ? 15_000 : (isTimeout ? 5_000 : 2_000);
                     const ms = Math.min(capMs, baseMs * 2 ** attempt);
+
+                    const reasonStr = isTimeout ? 'timeout' : isQuota ? 'quota exhausted' : 'unavailable';
                     this.logger.warn(
-                        `AI Agent gRPC retry #${attempt + 1} after code=${code} ` +
-                        `(${isQuota ? 'quota exhausted' : 'unavailable'}), delay=${ms}ms`,
+                        `AI Agent gRPC retry #${attempt + 1} after ${reasonStr} (code=${code ?? 'n/a'}), delay=${ms}ms`,
                     );
                     await new Promise<void>(resolve => setTimeout(resolve, ms));
                     continue;
                 }
+
                 const f = classifyGrpcFailure(err);
                 this.logger.warn(
                     `AI Agent gRPC failed kind=${f.kind} code=${f.grpcCode ?? 'n/a'}: ${f.message}`,
