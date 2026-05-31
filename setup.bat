@@ -95,7 +95,7 @@ echo.
 echo [START] Starting SecureMail Backend...
 echo.
 docker compose down -v > nul 2>&1
-docker compose up --build -d
+docker compose up -d
 
 :: ── 7. Wait for backend ────────────────────────────────────────
 echo.

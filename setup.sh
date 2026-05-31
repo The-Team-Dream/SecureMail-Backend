@@ -88,7 +88,7 @@ echo ""
 echo "🚀 Starting SecureMail Backend..."
 echo ""
 docker compose down -v > /dev/null 2>&1
-docker compose up --build -d
+docker compose up -d
 
 # ── 7. Wait for backend ─────────────────────────────────────────
 echo ""
