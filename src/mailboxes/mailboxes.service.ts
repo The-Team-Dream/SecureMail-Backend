@@ -303,7 +303,7 @@ export class MailboxesService {
       throw new NotFoundException('Mailbox not found');
     }
 
-    // ── Calculate Storage Usage ──────────────────────────
+    // ── Calculate Storage Usage ────────────────────────── uyvzepxffzulwwdf
     const storageStats = await this.prisma.attachment.aggregate({
       where: {
         email: {

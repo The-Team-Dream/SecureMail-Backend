@@ -75,32 +75,20 @@ export class ImapProvider {
     const lock = await client.getMailboxLock(mailbox);
     try {
       const messages: ImapMessageSummary[] = [];
-      let count = 0;
-      for await (const msg of client.fetch(
-        { seen: false },
-        { envelope: true, uid: true, flags: true },
-      )) {
-        messages.push({
-          uid: msg.uid,
-          envelope: msg.envelope as ImapMessageSummary['envelope'],
-          flags: msg.flags ?? new Set(),
-        });
-        count++;
-        if (count >= limit) break;
-      }
-      if (messages.length < limit) {
+      const total = client.mailbox ? client.mailbox.exists : 0;
+      if (total > 0) {
+        // Fetch the last 'limit' messages (which are the newest)
+        const start = Math.max(1, total - limit + 1);
+        const sequenceRange = `${start}:*`;
         for await (const msg of client.fetch(
-          { seen: true },
+          sequenceRange,
           { envelope: true, uid: true, flags: true },
         )) {
-          if (messages.some((m) => m.uid === msg.uid)) continue;
           messages.push({
             uid: msg.uid,
             envelope: msg.envelope as ImapMessageSummary['envelope'],
             flags: msg.flags ?? new Set(),
           });
-          count++;
-          if (count >= limit) break;
         }
       }
       return messages.sort(
